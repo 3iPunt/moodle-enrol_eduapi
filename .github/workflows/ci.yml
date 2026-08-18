@@ -95,4 +95,4 @@ jobs:
 
       - name: Run phpunit
         if: ${{ always() }}
-        run: moodle-plugin-ci phpunit --fail-on-warning
+        run: moodle-plugin-ci phpunit --fail-on-warning ./plugin
