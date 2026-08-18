@@ -25,10 +25,10 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->version   = 2026081800;        // The current plugin version (Date: YYYYMMDDXX).
-$plugin->requires  = 2019052000;        // Requires this Moodle version (mirrors enrol_oneroster).
+$plugin->requires  = 2024100700;        // Requires Moodle 4.5 LTS or later.
 $plugin->supported = [
     405,
-    500,
+    502,
 ];
 $plugin->component = 'enrol_eduapi';    // Full name of the plugin (used for diagnostics).
 $plugin->release = '2026-08-18';
