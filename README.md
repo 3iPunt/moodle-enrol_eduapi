@@ -1,62 +1,83 @@
 # Edu-API (`enrol_eduapi`)
 
-Método de matriculación que sincroniza organizaciones, cursos, usuarios y
-matrículas desde un proveedor externo compatible con la especificación
-1EdTech Edu-API v1p0. No modifica el núcleo de Moodle ni el tema: es un
-plugin de matriculación automático, sin interfaz de matriculación manual.
+Enrolment method that syncs organizations, courses, users and enrolments from
+an external provider compatible with the 1EdTech Edu-API v1p0 specification.
+It does not modify Moodle core or the theme: it is an automatic enrolment
+plugin, with no manual enrolment interface.
 
-## Qué hace
+## What it does
 
-- Sincroniza las organizaciones del proveedor como categorías de curso de
-  Moodle, respetando su jerarquía.
-- Sincroniza cursos (y, según configuración, grupos) a partir de los
-  `offerings` del proveedor.
-- Sincroniza usuarios, emparejándolos con los ya existentes en Moodle según
-  el criterio configurado.
-- Sincroniza las matrículas y el rol de cada usuario en cada curso.
+- Syncs the provider's organizations as Moodle course categories, preserving
+  their hierarchy.
+- Syncs courses (and, depending on configuration, groups) from the provider's
+  offerings.
+- Syncs users, matching them against existing Moodle accounts using the
+  configured criteria.
+- Syncs enrolments and each user's role in each course.
 
-## Cómo funciona
+## How it works
 
-- La sincronización es automática: se ejecuta mediante una tarea programada
-  y no requiere intervención manual del profesorado ni del alumnado.
-- La conexión con el proveedor se autentica con OAuth2 (Client Credentials
-  Grant); las credenciales se configuran una única vez en los ajustes del
-  plugin.
-- El plugin no borra cursos ni usuarios: cuando un elemento deja de existir
-  en el origen, según la configuración se desmatricula, se suspende la
-  matrícula o se deja intacto.
-- Si se desactiva el plugin, deja de sincronizar, pero no elimina los
-  cursos, usuarios ni matrículas ya creados.
+- Synchronisation is automatic: it runs through a scheduled task and requires
+  no manual intervention from teachers or students.
+- The connection to the provider authenticates with OAuth2 (Client
+  Credentials Grant); credentials are configured once in the plugin settings.
+- The plugin never deletes courses or users: when an element disappears at
+  the source, it is unenrolled, suspended or left untouched depending on
+  configuration.
+- If the plugin is disabled it stops syncing, but the courses, users and
+  enrolments it already created remain.
 
-## Requisitos
+## Requirements
 
-- Moodle 4.5 o superior.
-- No requiere otros plugins.
-- Acceso de red desde el servidor de Moodle al proveedor Edu-API
-  configurado.
+- Moodle 4.5 or later.
+- No other plugins required.
+- Network access from the Moodle server to the configured Edu-API provider.
 
-## Instalación
+## Installation
 
-1. Copiar el código en `enrol/eduapi/`.
-2. Completar la instalación desde **Administración del sitio › Notificaciones**
-   (o por línea de comandos: `php admin/cli/upgrade.php --non-interactive`).
-3. Purgar las cachés (**Administración del sitio › Desarrollo › Purgar cachés**
-   o `php admin/cli/purge_caches.php`).
+1. Copy the code into `enrol/eduapi/`.
+2. Complete the installation from **Site administration › Notifications**
+   (or via CLI: `php admin/cli/upgrade.php --non-interactive`).
+3. Purge caches (**Site administration › Development › Purge caches** or
+   `php admin/cli/purge_caches.php`).
 
-## Ajustes
+## Settings
 
-Este plugin todavía no tiene página de ajustes en esta versión inicial: solo
-incluye el esqueleto instalable y el cliente de conexión. La página completa
-de configuración (conexión, mapeo de roles, alcance de la sincronización,
-etc.) se añade en una fase de desarrollo posterior.
+Full configuration lives under **Site administration › Plugins › Enrolments
+› Edu-API**:
 
-## Desinstalación
+| Block | What it configures |
+|---|---|
+| **Connection** | The provider's `token_url`, `root_url`, `clientid` and `secret` (OAuth2 Client Credentials), with a test-connection page. |
+| **Education offering** | Which offering level becomes a course (`CourseOffering` or `ComponentOffering`; the level not chosen becomes groups) and the shortname attribute. |
+| **User matching** | Moodle field vs Edu-API attribute, with persistent mapping and an option to create unmatched users. |
+| **Role mapping** | A Moodle role (or "Do not enrol") for each `RoleTypeEnum` value. |
+| **Enrollment statuses** | An action for each of the 17 `EnrollmentStatusEnum` values (active / suspended / unenrol / ignore). |
+| **Sync scope** | Organizations and academic session to sync, inactive exclusion and keeping existing courses. |
 
-El plugin se desinstala limpiamente desde
-**Administración del sitio › Extensiones**; se elimina la tabla de
-correspondencia de usuarios (`enrol_eduapi_user_map`), pero no se eliminan
-los cursos, categorías, usuarios ni matrículas ya creados en Moodle.
+The full synchronisation is run by the `full_sync` scheduled task (disabled
+by default), and the `eduapi_offering_webhook` web service triggers an
+on-demand sync of a single offering.
 
-## Licencia
+## Uninstalling
 
-GNU GPL v3 or later — 2026 3iPunt (contacte@tresipunt.com)
+The plugin uninstalls cleanly from **Site administration › Plugins**; the
+user mapping table (`enrol_eduapi_user_map`) is removed, but courses,
+categories, users and enrolments already created in Moodle remain.
+
+## 🛠️ Development (optional)
+
+```bash
+# Unit tests
+vendor/bin/phpunit --filter enrol_eduapi
+```
+
+## 📄 Licence
+
+[GNU GPL v3 or later](https://www.gnu.org/copyleft/gpl.html) — 2026 [Tresipunt](https://tresipunt.com) (contacte@tresipunt.com)
+
+---
+
+<p align="center">
+  <a href="https://tresipunt.com"><img src="pix/tresipunt_logo.svg" alt="Tresipunt" width="120" height="30"></a>
+</p>
