@@ -54,7 +54,6 @@ use Throwable;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class eduapi_client {
-
     /** @var container */
     protected $container;
 
@@ -62,6 +61,8 @@ class eduapi_client {
     protected $trace;
 
     /**
+     * Create a new eduapi_client.
+     *
      * @param   container $container
      */
     public function __construct(container $container) {

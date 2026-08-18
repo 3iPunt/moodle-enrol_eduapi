@@ -34,7 +34,6 @@ use moodle_url;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class retry_later extends exception {
-
     /**
      * Constructor for a new Edu-API exception.
      *

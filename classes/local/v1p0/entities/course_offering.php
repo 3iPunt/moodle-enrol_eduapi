@@ -40,7 +40,6 @@ use enrol_eduapi\local\v1p0\endpoints\education_management;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class course_offering extends education_offering {
-
     /**
      * Get the operation ID for the by-id lookup of this entity type.
      *

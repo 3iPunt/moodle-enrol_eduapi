@@ -38,7 +38,6 @@ use enrol_eduapi\local\v1p0\endpoints\enrollment_management;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class enrollments_for_component_offering extends enrollments {
-
     /**
      * Get the operation ID for the paginated list of this entity type.
      *

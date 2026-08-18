@@ -49,7 +49,6 @@ use stdClass;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class person_converter {
-
     /** @var string The enrol_eduapi_user_map table name, without the Moodle table prefix */
     const MAP_TABLE = 'enrol_eduapi_user_map';
 

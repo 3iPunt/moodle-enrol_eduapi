@@ -45,7 +45,6 @@ use enrol_eduapi\local\v1p0\collections\persons;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class collection_factory extends abstract_factory implements collection_factory_interface {
-
     /**
      * Get the collection of all organizations.
      *

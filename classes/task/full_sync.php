@@ -42,7 +42,6 @@ use text_progress_trace;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class full_sync extends \core\task\scheduled_task {
-
     /**
      * Get the name of this task, for the scheduled tasks admin UI.
      *

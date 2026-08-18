@@ -42,7 +42,6 @@ use Exception;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class converter {
-
     /**
      * Convert an Edu-API `DateTimeZ` value to a unix timestamp.
      *

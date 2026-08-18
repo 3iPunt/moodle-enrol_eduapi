@@ -43,7 +43,6 @@ use enrol_eduapi\local\interfaces\endpoint as endpoint_interface;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 abstract class education_offering extends entity {
-
     /**
      * Get the endpoint that serves every EducationOffering subtype.
      *

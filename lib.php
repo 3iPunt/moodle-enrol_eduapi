@@ -25,7 +25,5 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
-
 // We like class autoloading.
 class_alias(enrol_eduapi\plugin::class, 'enrol_eduapi_plugin');

@@ -57,7 +57,6 @@ use stdClass;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class oauth2_client extends core_oauth2_client implements client_interface {
-
     /** @var string The Edu-API v1p0 core read-only scope. */
     const SCOPE_CORE_READONLY = 'http://purl.1edtech.org/spec/eduapi/v1p0/scope/core.readonly';
 
@@ -101,11 +100,9 @@ class oauth2_client extends core_oauth2_client implements client_interface {
         parent::__construct(
             $clientid,
             $clientsecret,
-
             // Edu-API's Client Credentials Grant is performed entirely server-to-server, without a browser
             // redirect, so no meaningful return URL exists.
             new moodle_url(''),
-
             implode(' ', $this->get_all_scopes())
         );
     }

@@ -43,7 +43,6 @@ use progress_trace;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class enrollment_converter {
-
     /** @var string Action: create/update the enrolment in Moodle's active state */
     const ACTION_ENROL_ACTIVE = 'enrol_active';
 
@@ -227,13 +226,15 @@ class enrollment_converter {
                 }
 
                 $context = \context_course::instance($instance->courseid);
-                if (!$DB->record_exists('role_assignments', [
+                if (
+                    !$DB->record_exists('role_assignments', [
                     'roleid' => $roleid,
                     'contextid' => $context->id,
                     'userid' => $moodleuser->id,
                     'component' => "enrol_{$instance->enrol}",
                     'itemid' => $instance->id,
-                ])) {
+                    ])
+                ) {
                     role_assign($roleid, $moodleuser->id, $context->id, "enrol_{$instance->enrol}", $instance->id);
                 }
                 return;

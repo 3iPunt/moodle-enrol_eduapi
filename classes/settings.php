@@ -44,7 +44,6 @@ use part_of_admin_tree;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class settings {
-
     /**
      * Add a role mapping setting for one `RoleTypeEnum` value.
      *
@@ -94,10 +93,14 @@ class settings {
         string $default
     ): void {
         $options = [
-            enrollment_converter::ACTION_ENROL_ACTIVE => get_string('settings_enrollmentstatus_action_enrol_active', 'enrol_eduapi'),
-            enrollment_converter::ACTION_ENROL_SUSPENDED => get_string('settings_enrollmentstatus_action_enrol_suspended', 'enrol_eduapi'),
-            enrollment_converter::ACTION_UNENROL => get_string('settings_enrollmentstatus_action_unenrol', 'enrol_eduapi'),
-            enrollment_converter::ACTION_IGNORE => get_string('settings_enrollmentstatus_action_ignore', 'enrol_eduapi'),
+            enrollment_converter::ACTION_ENROL_ACTIVE =>
+                get_string('settings_enrollmentstatus_action_enrol_active', 'enrol_eduapi'),
+            enrollment_converter::ACTION_ENROL_SUSPENDED =>
+                get_string('settings_enrollmentstatus_action_enrol_suspended', 'enrol_eduapi'),
+            enrollment_converter::ACTION_UNENROL =>
+                get_string('settings_enrollmentstatus_action_unenrol', 'enrol_eduapi'),
+            enrollment_converter::ACTION_IGNORE =>
+                get_string('settings_enrollmentstatus_action_ignore', 'enrol_eduapi'),
         ];
 
         $identifier = strtolower($status);

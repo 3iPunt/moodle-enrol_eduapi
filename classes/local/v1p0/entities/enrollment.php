@@ -46,7 +46,6 @@ use enrol_eduapi\local\v1p0\endpoints\enrollment_management;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class enrollment extends entity {
-
     /**
      * Get the endpoint that serves this entity type.
      *

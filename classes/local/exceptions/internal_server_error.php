@@ -34,7 +34,6 @@ use moodle_url;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class internal_server_error extends exception {
-
     /**
      * Constructor for a new Edu-API exception.
      *

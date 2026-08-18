@@ -42,7 +42,6 @@ use stdClass;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class collection_offerings extends collection {
-
     /**
      * Get the endpoint that serves this collection's entity type.
      *

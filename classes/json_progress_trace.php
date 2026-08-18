@@ -37,7 +37,6 @@ use progress_trace;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class json_progress_trace extends progress_trace {
-
     /** @var string[] Buffered messages */
     protected array $messages = [];
 

@@ -61,7 +61,6 @@ use Throwable;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class offering_webhook extends external_api {
-
     /**
      * Parameter definition for execute().
      *
@@ -76,7 +75,8 @@ class offering_webhook extends external_api {
             ),
             'organization' => new external_value(
                 PARAM_TEXT,
-                'Optional Edu-API organization sourcedId. If given, the offering is only synced when it belongs to this organization.',
+                'Optional Edu-API organization sourcedId. If given, the offering is only synced when ' .
+                    'it belongs to this organization.',
                 VALUE_DEFAULT,
                 null
             ),
@@ -86,13 +86,14 @@ class offering_webhook extends external_api {
     /**
      * Sync a single Edu-API offering now.
      *
-     * @param   string $sourcedId The offering's sourcedId
-     * @param   string|null $organization An optional organization sourcedId to validate the offering against
+     * @param   string $sourcedid The offering's sourcedId
+     * @param   string|null $organization An optional organization sourcedId to validate the offering
+     *                                    against
      * @return  array ['result' => bool, 'warnings' => array, 'messages' => string[]]
      */
-    public static function execute(string $sourcedId, ?string $organization = null): array {
+    public static function execute(string $sourcedid, ?string $organization = null): array {
         $params = self::validate_parameters(self::execute_parameters(), [
-            'sourcedId' => $sourcedId,
+            'sourcedId' => $sourcedid,
             'organization' => $organization,
         ]);
 

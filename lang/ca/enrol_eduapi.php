@@ -23,7 +23,6 @@
  */
 
 defined('MOODLE_INTERNAL') || die();
-
 $string['configurationcorrect'] = 'La connexió s\'ha provat correctament.';
 $string['connectionfailed'] = 'No s\'ha pogut connectar amb el proveïdor Edu-API: {$a}';
 $string['connectionpartial'] = 'L\'autenticació s\'ha fet correctament, però ha fallat l\'obtenció d\'organitzacions/sessions acadèmiques: {$a}';
@@ -33,110 +32,94 @@ $string['offeringnotfound'] = 'No s\'ha trobat cap offering amb sourcedId \'{$a}
 $string['offeringorganizationmismatch'] = 'L\'offering \'{$a}\' no pertany a l\'organització indicada.';
 $string['pluginname'] = 'Edu-API';
 $string['pluginname_desc'] = 'Moodle admet l\'especificació 1EdTech Edu-API v1p0 per sincronitzar organitzacions, cursos, usuaris i matriculacions.';
-$string['test_eduapi_connection'] = 'Prova la connexió amb Edu-API';
-
-// Privacy API.
 $string['privacy:mappingpath'] = 'Edu-API';
 $string['privacy:metadata:enrol_eduapi_user_map'] = 'Un enllaç entre un identificador de persona d\'Edu-API i un usuari Moodle.';
-$string['privacy:metadata:enrol_eduapi_user_map:parentid'] = 'El sourcedId d\'Edu-API de la Person.';
 $string['privacy:metadata:enrol_eduapi_user_map:mappedid'] = 'L\'id de l\'usuari Moodle enllaçat.';
-
-// Ajustos de connexió.
+$string['privacy:metadata:enrol_eduapi_user_map:parentid'] = 'El sourcedId d\'Edu-API de la Person.';
+$string['settings_connection_clientid'] = 'ID de client';
+$string['settings_connection_clientid_desc'] = 'L\'ID de client OAuth2 proporcionat pel proveïdor.';
+$string['settings_connection_pagesize'] = 'Mida de pàgina';
+$string['settings_connection_pagesize_desc'] = 'El nombre de registres sol·licitats per pàgina (paràmetre \'limit\') en obtenir una col·lecció.';
+$string['settings_connection_root_url'] = 'URL arrel d\'Edu-API';
+$string['settings_connection_root_url_desc'] = 'La URL arrel de l\'API Edu-API v1p0 del proveïdor, incloent-hi qualsevol ruta específica del proveïdor. S\'utilitza tal qual: no s\'hi afegeix cap ruta automàticament.';
+$string['settings_connection_secret'] = 'Secret de client';
+$string['settings_connection_secret_desc'] = 'El secret de client OAuth2 proporcionat pel proveïdor.';
 $string['settings_connection_settings'] = 'Ajustos de connexió';
 $string['settings_connection_token_url'] = 'URL del token OAuth2';
 $string['settings_connection_token_url_desc'] = 'La URL de l\'endpoint de token OAuth2 Client Credentials Grant del proveïdor.';
-$string['settings_connection_root_url'] = 'URL arrel d\'Edu-API';
-$string['settings_connection_root_url_desc'] = 'La URL arrel de l\'API Edu-API v1p0 del proveïdor, incloent-hi qualsevol ruta específica del proveïdor. S\'utilitza tal qual: no s\'hi afegeix cap ruta automàticament.';
-$string['settings_connection_clientid'] = 'ID de client';
-$string['settings_connection_clientid_desc'] = 'L\'ID de client OAuth2 proporcionat pel proveïdor.';
-$string['settings_connection_secret'] = 'Secret de client';
-$string['settings_connection_secret_desc'] = 'El secret de client OAuth2 proporcionat pel proveïdor.';
-$string['settings_connection_pagesize'] = 'Mida de pàgina';
-$string['settings_connection_pagesize_desc'] = 'El nombre de registres sol·licitats per pàgina (paràmetre \'limit\') en obtenir una col·lecció.';
-
-// Provar connexió.
-$string['settings_testconnection'] = 'Provar connexió';
-$string['settings_testconnection_detail'] = 'Feu servir això per comprovar que els ajustos de connexió anteriors són correctes, i per actualitzar el llistat d\'organitzacions i sessions acadèmiques disponibles més avall.';
-$string['settings_testconnection_link'] = 'Provar la connexió amb Edu-API';
-
-// Nivell d'offering.
-$string['settings_offering'] = 'Mapatge de cursos';
-$string['settings_offering_level'] = 'Nivell d\'offering';
-$string['settings_offering_level_desc'] = 'Quina entitat d\'Edu-API esdevé curs Moodle. El nivell no triat esdevé grups dins del curs quan "Sincronitzar grups" està actiu.';
-$string['settings_offering_level_courseoffering'] = 'CourseOffering (els ComponentOffering esdevenen grups)';
-$string['settings_offering_level_componentoffering'] = 'ComponentOffering (cadascun és un curs propi)';
-$string['settings_offering_level_changed_warning'] = 'L\'ajust "Nivell d\'offering" ha canviat des de l\'última sincronització, i ja existeixen cursos sincronitzats amb el nivell anterior. Aquests cursos es deixen intactes: aquest connector no migra cursos entre nivells d\'offering automàticament.';
-$string['settings_sync_groups'] = 'Sincronitzar grups';
-$string['settings_sync_groups_desc'] = 'Crea un grup de Moodle per cada offering del nivell no triat com a curs (per exemple, els ComponentOffering, quan CourseOffering és el nivell de curs).';
-
-// Aparellament d'usuaris.
-$string['settings_usermatching'] = 'Aparellament d\'usuaris';
-$string['settings_user_match_moodlefield'] = 'Camp Moodle';
-$string['settings_user_match_moodlefield_desc'] = 'El camp d\'usuari de Moodle amb què s\'aparella una Person.';
-$string['settings_user_match_source'] = 'Atribut origen d\'Edu-API';
-$string['settings_user_match_source_desc'] = 'L\'atribut de la Person que es compara amb el camp Moodle anterior.';
-$string['settings_user_match_source_primaryemail'] = 'primaryEmail';
-$string['settings_user_match_source_sourcedid'] = 'sourcedId';
-$string['settings_user_match_source_otheridentifier'] = 'otherIdentifiers: {$a}';
 $string['settings_create_unmatched_users'] = 'Quan no es troba cap usuari aparellat';
+$string['settings_create_unmatched_users_create'] = 'Crear un usuari Moodle quan no hi ha aparellament';
 $string['settings_create_unmatched_users_desc'] = 'Què cal fer amb una Person que no coincideix amb cap usuari Moodle existent.';
 $string['settings_create_unmatched_users_skip'] = 'Ometre les persones sense aparellar (no sincronitzar-les)';
-$string['settings_create_unmatched_users_create'] = 'Crear un usuari Moodle quan no hi ha aparellament';
-$string['settings_shortname_attribute'] = 'Origen del shortname del curs';
-$string['settings_shortname_attribute_desc'] = 'L\'atribut de l\'offering utilitzat com a shortname del curs Moodle.';
-$string['settings_shortname_attribute_sourcedid'] = 'sourcedId';
-$string['settings_shortname_attribute_primarycode'] = 'primaryCode';
-
-// Mapatge de rols.
-$string['settings_rolemapping'] = 'Mapatge de rols';
-$string['settings_rolemapping_generic_desc'] = 'El rol Moodle assignat per a cada valor de RoleTypeEnum d\'Edu-API. Trieu "No matricular" per no matricular en absolut els usuaris amb aquest rol.';
-$string['settings_rolemapping_notmapped'] = 'No matricular';
-$string['settings_rolemapping_member'] = 'Mapatge de rol: Member';
-$string['settings_rolemapping_chair'] = 'Mapatge de rol: Chair';
-$string['settings_rolemapping_staff'] = 'Mapatge de rol: Staff';
-$string['settings_rolemapping_student'] = 'Mapatge de rol: Student';
-$string['settings_rolemapping_administrator'] = 'Mapatge de rol: Administrator';
-$string['settings_rolemapping_aide'] = 'Mapatge de rol: Aide';
-$string['settings_rolemapping_guardian'] = 'Mapatge de rol: Guardian';
-$string['settings_rolemapping_parent'] = 'Mapatge de rol: Parent';
-$string['settings_rolemapping_proctor'] = 'Mapatge de rol: Proctor';
-$string['settings_rolemapping_relative'] = 'Mapatge de rol: Relative';
-$string['settings_rolemapping_teacher'] = 'Mapatge de rol: Teacher';
-$string['settings_rolemapping_advisor'] = 'Mapatge de rol: Advisor';
-$string['settings_rolemapping_teachingassistant'] = 'Mapatge de rol: Teaching assistant';
-
-// Mapatge d'estat de matriculació.
-$string['settings_enrollmentstatus'] = 'Mapatge d\'estat de matriculació';
-$string['settings_enrollmentstatus_generic_desc'] = 'L\'acció de sincronització aplicada per a cada valor d\'EnrollmentStatusEnum d\'Edu-API. "recordStatus = deleted" sempre desmatricula, amb independència d\'aquest mapatge.';
-$string['settings_enrollmentstatus_action_enrol_active'] = 'Matricular actiu';
-$string['settings_enrollmentstatus_action_enrol_suspended'] = 'Matricular suspès';
-$string['settings_enrollmentstatus_action_unenrol'] = 'Desmatricular';
-$string['settings_enrollmentstatus_action_ignore'] = 'Ignorar (no crear; no tocar l\'existent)';
-$string['settings_enrollmentstatus_mapping_enrolled'] = 'Estat de matriculació: enrolled';
-$string['settings_enrollmentstatus_mapping_registered'] = 'Estat de matriculació: registered';
-$string['settings_enrollmentstatus_mapping_accepted'] = 'Estat de matriculació: accepted';
-$string['settings_enrollmentstatus_mapping_pending'] = 'Estat de matriculació: pending';
-$string['settings_enrollmentstatus_mapping_deferred'] = 'Estat de matriculació: deferred';
-$string['settings_enrollmentstatus_mapping_onhold'] = 'Estat de matriculació: onHold';
-$string['settings_enrollmentstatus_mapping_suspended'] = 'Estat de matriculació: suspended';
-$string['settings_enrollmentstatus_mapping_onleave'] = 'Estat de matriculació: onLeave';
-$string['settings_enrollmentstatus_mapping_interruption'] = 'Estat de matriculació: interruption';
-$string['settings_enrollmentstatus_mapping_finished'] = 'Estat de matriculació: finished';
-$string['settings_enrollmentstatus_mapping_withdrawnpassing'] = 'Estat de matriculació: withdrawnPassing';
-$string['settings_enrollmentstatus_mapping_withdrawnfailing'] = 'Estat de matriculació: withdrawnFailing';
-$string['settings_enrollmentstatus_mapping_withdrawn'] = 'Estat de matriculació: withdrawn';
-$string['settings_enrollmentstatus_mapping_dropped'] = 'Estat de matriculació: dropped';
-$string['settings_enrollmentstatus_mapping_cancelled'] = 'Estat de matriculació: cancelled';
-$string['settings_enrollmentstatus_mapping_revoked'] = 'Estat de matriculació: revoked';
-$string['settings_enrollmentstatus_mapping_declined'] = 'Estat de matriculació: declined';
-
-// Dades a sincronitzar.
 $string['settings_datasync'] = 'Dades a sincronitzar';
-$string['settings_datasync_organizations'] = 'Organitzacions';
-$string['settings_datasync_organizations_desc'] = 'Les organitzacions que se sincronitzen. Es completa amb "Provar connexió" (a dalt).';
 $string['settings_datasync_academic_session'] = 'Sessió acadèmica';
 $string['settings_datasync_academic_session_desc'] = 'L\'única sessió acadèmica que se sincronitza. Es completa amb "Provar connexió" (a dalt).';
+$string['settings_datasync_organizations'] = 'Organitzacions';
+$string['settings_datasync_organizations_desc'] = 'Les organitzacions que se sincronitzen. Es completa amb "Provar connexió" (a dalt).';
+$string['settings_enrollmentstatus'] = 'Mapatge d\'estat de matriculació';
+$string['settings_enrollmentstatus_action_enrol_active'] = 'Matricular actiu';
+$string['settings_enrollmentstatus_action_enrol_suspended'] = 'Matricular suspès';
+$string['settings_enrollmentstatus_action_ignore'] = 'Ignorar (no crear; no tocar l\'existent)';
+$string['settings_enrollmentstatus_action_unenrol'] = 'Desmatricular';
+$string['settings_enrollmentstatus_generic_desc'] = 'L\'acció de sincronització aplicada per a cada valor d\'EnrollmentStatusEnum d\'Edu-API. "recordStatus = deleted" sempre desmatricula, amb independència d\'aquest mapatge.';
+$string['settings_enrollmentstatus_mapping_accepted'] = 'Estat de matriculació: accepted';
+$string['settings_enrollmentstatus_mapping_cancelled'] = 'Estat de matriculació: cancelled';
+$string['settings_enrollmentstatus_mapping_declined'] = 'Estat de matriculació: declined';
+$string['settings_enrollmentstatus_mapping_deferred'] = 'Estat de matriculació: deferred';
+$string['settings_enrollmentstatus_mapping_dropped'] = 'Estat de matriculació: dropped';
+$string['settings_enrollmentstatus_mapping_enrolled'] = 'Estat de matriculació: enrolled';
+$string['settings_enrollmentstatus_mapping_finished'] = 'Estat de matriculació: finished';
+$string['settings_enrollmentstatus_mapping_interruption'] = 'Estat de matriculació: interruption';
+$string['settings_enrollmentstatus_mapping_onhold'] = 'Estat de matriculació: onHold';
+$string['settings_enrollmentstatus_mapping_onleave'] = 'Estat de matriculació: onLeave';
+$string['settings_enrollmentstatus_mapping_pending'] = 'Estat de matriculació: pending';
+$string['settings_enrollmentstatus_mapping_registered'] = 'Estat de matriculació: registered';
+$string['settings_enrollmentstatus_mapping_revoked'] = 'Estat de matriculació: revoked';
+$string['settings_enrollmentstatus_mapping_suspended'] = 'Estat de matriculació: suspended';
+$string['settings_enrollmentstatus_mapping_withdrawn'] = 'Estat de matriculació: withdrawn';
+$string['settings_enrollmentstatus_mapping_withdrawnfailing'] = 'Estat de matriculació: withdrawnFailing';
+$string['settings_enrollmentstatus_mapping_withdrawnpassing'] = 'Estat de matriculació: withdrawnPassing';
 $string['settings_exclude_inactive'] = 'Excloure registres inactius';
 $string['settings_exclude_inactive_desc'] = 'Exclou de la sincronització les organitzacions, offerings i persones amb recordStatus \'inactive\'.';
 $string['settings_keep_existing_courses'] = 'Conservar cursos existents';
 $string['settings_keep_existing_courses_desc'] = 'No arxiva ni elimina els cursos Moodle que ja s\'havien sincronitzat però que han deixat d\'aparèixer a l\'origen.';
+$string['settings_offering'] = 'Mapatge de cursos';
+$string['settings_offering_level'] = 'Nivell d\'offering';
+$string['settings_offering_level_changed_warning'] = 'L\'ajust "Nivell d\'offering" ha canviat des de l\'última sincronització, i ja existeixen cursos sincronitzats amb el nivell anterior. Aquests cursos es deixen intactes: aquest connector no migra cursos entre nivells d\'offering automàticament.';
+$string['settings_offering_level_componentoffering'] = 'ComponentOffering (cadascun és un curs propi)';
+$string['settings_offering_level_courseoffering'] = 'CourseOffering (els ComponentOffering esdevenen grups)';
+$string['settings_offering_level_desc'] = 'Quina entitat d\'Edu-API esdevé curs Moodle. El nivell no triat esdevé grups dins del curs quan "Sincronitzar grups" està actiu.';
+$string['settings_rolemapping'] = 'Mapatge de rols';
+$string['settings_rolemapping_administrator'] = 'Mapatge de rol: Administrator';
+$string['settings_rolemapping_advisor'] = 'Mapatge de rol: Advisor';
+$string['settings_rolemapping_aide'] = 'Mapatge de rol: Aide';
+$string['settings_rolemapping_chair'] = 'Mapatge de rol: Chair';
+$string['settings_rolemapping_generic_desc'] = 'El rol Moodle assignat per a cada valor de RoleTypeEnum d\'Edu-API. Trieu "No matricular" per no matricular en absolut els usuaris amb aquest rol.';
+$string['settings_rolemapping_guardian'] = 'Mapatge de rol: Guardian';
+$string['settings_rolemapping_member'] = 'Mapatge de rol: Member';
+$string['settings_rolemapping_notmapped'] = 'No matricular';
+$string['settings_rolemapping_parent'] = 'Mapatge de rol: Parent';
+$string['settings_rolemapping_proctor'] = 'Mapatge de rol: Proctor';
+$string['settings_rolemapping_relative'] = 'Mapatge de rol: Relative';
+$string['settings_rolemapping_staff'] = 'Mapatge de rol: Staff';
+$string['settings_rolemapping_student'] = 'Mapatge de rol: Student';
+$string['settings_rolemapping_teacher'] = 'Mapatge de rol: Teacher';
+$string['settings_rolemapping_teachingassistant'] = 'Mapatge de rol: Teaching assistant';
+$string['settings_shortname_attribute'] = 'Origen del shortname del curs';
+$string['settings_shortname_attribute_desc'] = 'L\'atribut de l\'offering utilitzat com a shortname del curs Moodle.';
+$string['settings_shortname_attribute_primarycode'] = 'primaryCode';
+$string['settings_shortname_attribute_sourcedid'] = 'sourcedId';
+$string['settings_sync_groups'] = 'Sincronitzar grups';
+$string['settings_sync_groups_desc'] = 'Crea un grup de Moodle per cada offering del nivell no triat com a curs (per exemple, els ComponentOffering, quan CourseOffering és el nivell de curs).';
+$string['settings_testconnection'] = 'Provar connexió';
+$string['settings_testconnection_detail'] = 'Feu servir això per comprovar que els ajustos de connexió anteriors són correctes, i per actualitzar el llistat d\'organitzacions i sessions acadèmiques disponibles més avall.';
+$string['settings_testconnection_link'] = 'Provar la connexió amb Edu-API';
+$string['settings_user_match_moodlefield'] = 'Camp Moodle';
+$string['settings_user_match_moodlefield_desc'] = 'El camp d\'usuari de Moodle amb què s\'aparella una Person.';
+$string['settings_user_match_source'] = 'Atribut origen d\'Edu-API';
+$string['settings_user_match_source_desc'] = 'L\'atribut de la Person que es compara amb el camp Moodle anterior.';
+$string['settings_user_match_source_otheridentifier'] = 'otherIdentifiers: {$a}';
+$string['settings_user_match_source_primaryemail'] = 'primaryEmail';
+$string['settings_user_match_source_sourcedid'] = 'sourcedId';
+$string['settings_usermatching'] = 'Aparellament d\'usuaris';
+$string['test_eduapi_connection'] = 'Prova la connexió amb Edu-API';

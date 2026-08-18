@@ -51,7 +51,6 @@ use enrol_eduapi\local\v1p0\endpoints\person_management;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class container implements container_interface {
-
     /** @var array Maps a service group name to its concrete endpoint class */
     const ENDPOINT_CLASSES = [
         'organization' => organization_management::class,

@@ -44,7 +44,6 @@ use stdClass;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 abstract class collection implements IteratorAggregate {
-
     /** @var container_interface The container to which this collection belongs */
     protected $container;
 

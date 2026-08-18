@@ -42,7 +42,6 @@ use enrol_eduapi\local\interfaces\cache_factory as cache_factory_interface;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class cache_factory extends abstract_factory implements cache_factory_interface {
-
     /** @var cache[] Caches already created, keyed by area name */
     protected $caches = [];
 

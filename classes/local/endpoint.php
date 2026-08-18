@@ -49,7 +49,6 @@ use enrol_eduapi\local\interfaces\filter as filter_interface;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 abstract class endpoint implements endpoint_interface {
-
     /** @var container_interface The container containing the client and all factories */
     protected $container;
 

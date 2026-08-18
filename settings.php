@@ -28,7 +28,6 @@ use enrol_eduapi\local\converters\enrollment_converter;
 use enrol_eduapi\local\converters\offering_converter;
 
 if ($ADMIN->fulltree) {
-
     $settings->add(new admin_setting_heading(
         'enrol_eduapi',
         '',
@@ -244,7 +243,13 @@ if ($ADMIN->fulltree) {
         'teachingAssistant' => null,
     ];
     foreach ($roletypedefaults as $roletype => $defaultshortname) {
-        \enrol_eduapi\settings::add_role_mapping($settings, $roletype, $roleidstoshortnames, $roledisplayoptions, $defaultshortname);
+        \enrol_eduapi\settings::add_role_mapping(
+            $settings,
+            $roletype,
+            $roleidstoshortnames,
+            $roledisplayoptions,
+            $defaultshortname
+        );
     }
 
     // EnrollmentStatusEnum mapping: one admin_setting_configselect per value, each with 4 actions.

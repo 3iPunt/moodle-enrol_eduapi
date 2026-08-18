@@ -40,7 +40,6 @@ use OutOfRangeException;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class command {
-
     /** @var endpoint The endpoint that this command relates to */
     protected $endpoint;
 
@@ -92,10 +91,10 @@ class command {
                 if (strpos($url, $name) === false) {
                     throw new OutOfRangeException("Parameter not found in URL '{$name}'");
                 }
-                // rawurlencode() the substituted value: an unencoded sourcedId containing / ? # & (all
-                // valid in Edu-API sourcedIds, which are opaque strings) would otherwise corrupt the
-                // resulting request path (e.g. splitting it into extra segments, or introducing a
-                // query string / fragment where none was intended).
+                // Encode the substituted value: an unencoded sourcedId containing / ? # & (all valid in
+                // Edu-API sourcedIds, which are opaque strings) would otherwise corrupt the resulting
+                // request path (e.g. splitting it into extra segments, or introducing a query string /
+                // fragment where none was intended).
                 $url = str_replace($name, rawurlencode($value), $url);
                 unset($params[$name]);
             }

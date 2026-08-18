@@ -47,7 +47,6 @@ use stdClass;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class offering_converter {
-
     /** @var string `offering_level` value: CourseOffering becomes the Moodle course */
     const LEVEL_COURSE_OFFERING = 'courseoffering';
 
@@ -157,8 +156,8 @@ class offering_converter {
             }
         }
 
-        // 'sourcedId', unset, or a primaryCode with no identifier: fall back to the sourcedId, which is
-        // always present and always unique.
+        // Attribute is sourcedId, unset, or a primaryCode with no identifier: fall back to the
+        // sourcedId, which is always present and always unique.
         return $offering->get_id();
     }
 

@@ -52,7 +52,6 @@ use stdClass;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class entity_factory extends abstract_factory implements entity_factory_interface {
-
     /**
      * Get an Organization entity from a raw row.
      *

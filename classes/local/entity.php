@@ -46,7 +46,6 @@ use stdClass;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 abstract class entity {
-
     /** @var container_interface The container for this Edu-API client */
     protected $container;
 

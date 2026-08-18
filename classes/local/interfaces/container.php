@@ -42,7 +42,6 @@ use enrol_eduapi\local\interfaces\client as client_interface;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 interface container {
-
     /**
      * Constructor for the new container.
      *

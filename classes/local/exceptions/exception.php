@@ -40,7 +40,6 @@ use moodle_url;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class exception extends base_exception {
-
     /** @var moodle_url The URL that was requested */
     protected $url;
 

@@ -58,15 +58,14 @@ use core_privacy\local\request\writer;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class provider implements
-    // enrol_eduapi_user_map stores a per-user identifier link.
+    // The enrol_eduapi_user_map table stores a per-user identifier link.
     \core_privacy\local\metadata\provider,
 
-    // This plugin can export/delete an individual user's own data.
-    \core_privacy\local\request\plugin\provider,
-
     // This plugin can determine which users have data within a given context.
-    \core_privacy\local\request\core_userlist_provider {
+    \core_privacy\local\request\core_userlist_provider,
 
+    // This plugin can export/delete an individual user's own data.
+    \core_privacy\local\request\plugin\provider {
     /**
      * Returns metadata about this plugin's personal data storage.
      *
