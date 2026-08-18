@@ -184,17 +184,34 @@ class person_converter {
      */
     public static function derive_username(person $person, string $moodlefield, string $sourcevalue): string {
         if ($moodlefield === 'username') {
-            return self::normalise_for_field('username', $sourcevalue);
+            return self::sanitise_username(self::normalise_for_field('username', $sourcevalue), $person->get_id());
         }
 
         $email = $person->get('primaryEmail')->email ?? null;
         if (!empty($email) && strpos($email, '@') !== false) {
-            return strtolower(strstr($email, '@', true));
+            return self::sanitise_username(strstr($email, '@', true), $person->get_id());
         }
 
-        $sanitised = preg_replace('/[^a-z0-9._-]/', '', strtolower($person->get_id()));
+        return self::sanitise_username($person->get_id(), $person->get_id());
+    }
 
-        return $sanitised !== '' ? $sanitised : 'eduapi-' . substr(md5($person->get_id()), 0, 8);
+    /**
+     * Sanitise a candidate username to satisfy Moodle's username rules.
+     *
+     * Accented characters are transliterated to their ASCII equivalents (é => e) before any
+     * remaining disallowed character is stripped, so names such as "farré" survive as "farre"
+     * rather than being truncated. Falls back to a stable hash-based username when nothing
+     * usable remains.
+     *
+     * @param   string $candidate
+     * @param   string $sourcedid Used to build a stable fallback when the candidate sanitises to ''.
+     * @return  string
+     */
+    public static function sanitise_username(string $candidate, string $sourcedid): string {
+        $candidate = \core_text::specialtoascii($candidate);
+        $candidate = preg_replace('/[^a-z0-9._-]/', '', strtolower($candidate));
+
+        return $candidate !== '' ? $candidate : 'eduapi-' . substr(md5($sourcedid), 0, 8);
     }
 
     /**
