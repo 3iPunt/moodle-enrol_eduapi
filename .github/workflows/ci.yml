@@ -32,7 +32,7 @@ jobs:
         database: ['pgsql', 'mariadb']
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           # Clone in plugin subdir, so we can setup CI in default directory.
           path: plugin
