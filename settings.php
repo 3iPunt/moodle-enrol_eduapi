@@ -114,7 +114,7 @@ if ($ADMIN->fulltree) {
         ]
     ));
 
-    // Resolved (Cliente) — sin migración: if offering_level changed after courses were already synced
+    // Resolved (Client) - no migration: if offering_level changed after courses were already synced
     // under the previous level, offering_converter::detect_offering_level_change() (development phase
     // 5's sync) sets this flag; this page then shows the warning next to the selector until it is
     // cleared (which only happens automatically once every synced course matches the current level
@@ -204,7 +204,7 @@ if ($ADMIN->fulltree) {
     ));
 
     // Role mapping: one admin_setting_configselect per RoleTypeEnum value, each offering every Moodle
-    // course role plus an explicit "No matricular" (not mapped) option.
+    // course role plus an explicit "Do not enrol" (not mapped) option.
     $settings->add(new admin_setting_heading(
         'enrol_eduapi/rolemapping',
         get_string('settings_rolemapping', 'enrol_eduapi'),
@@ -226,7 +226,7 @@ if ($ADMIN->fulltree) {
 
     // RoleTypeEnum values per spec.md / references/enumeration.md, with the defaults resolved in
     // spec.md: student -> student, teacher -> editingteacher, administrator -> manager, all other
-    // values (without an obvious Moodle counterpart) default to "No matricular".
+    // values (without an obvious Moodle counterpart) default to "Do not enrol".
     $roletypedefaults = [
         'member' => null,
         'chair' => null,

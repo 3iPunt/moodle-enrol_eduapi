@@ -36,18 +36,18 @@ use Throwable;
 /**
  * Orchestrates a full Edu-API sync, delegating all Moodle-mapping logic to the
  * classes/local/converters/ (development phase 3), in the order documented in spec.md:
- * organizaciones → sesión académica → offerings → personas → matrículas.
+ * organizations -> academic session -> offerings -> persons -> enrolments.
  *
  * Unlike enrol_oneroster's oneroster_client.php (~74 KB, all sync logic in one file), this class is
  * a thin orchestrator: it resolves the sync SCOPE (which organizations, which academic session, which
  * offering level) and loops, but every actual Moodle write goes through a converter.
  *
- * "Personas" are not synced as a separate eager step: Edu-API has no organization-scoped `/persons`
+ * Persons are not synced as a separate eager step: Edu-API has no organization-scoped `/persons`
  * endpoint (only a global collection), so eagerly fetching every Person in the provider regardless of
  * whether they are ever enrolled in anything in scope would be wasteful. Instead, each Enrollment is
  * resolved together with its Person at the point enrollment_converter::convert() processes it — which
  * still respects the spec's documented order (a person is only ever synced immediately before the
- * matrícula that needs it).
+ * enrolment that needs it).
  *
  * @package    enrol_eduapi
  * @copyright  2026 3iPunt (contacte@tresipunt.com)
@@ -113,7 +113,7 @@ class eduapi_client {
      *
      * Per spec.md, `exclude_inactive` applies to organizations, offerings and persons — never to
      * Enrollment, whose own 17-value `enrollmentStatus` mapping (enrollment_converter.php) is the
-     * separate, dedicated filtering axis for matrícula records.
+     * separate, dedicated filtering axis for enrolment records.
      *
      * @param   object $entity Any entity exposing get('recordStatus')
      * @return  bool
@@ -424,9 +424,9 @@ class eduapi_client {
      * Disable (never delete) the `enrol_eduapi` instance of every previously-synced course whose
      * idnumber was not touched in this run, when `keep_existing_courses` is off.
      *
-     * DESIGN DECISION (spec.md describes only the `keep_existing_courses = true` behaviour —
-     * "los cursos... no se archivan ni eliminan" — and does not specify the exact Moodle mechanics for
-     * the opposite case). This deliberately conservative, reversible interpretation disables the
+     * DESIGN DECISION (spec.md describes only the `keep_existing_courses = true` behaviour -
+     * "courses... are neither archived nor deleted" - and does not specify the exact Moodle mechanics
+     * for the opposite case). This deliberately conservative, reversible interpretation disables the
      * enrolment method rather than deleting the course or any of its data, consistent with how Moodle
      * enrol plugins generally treat "no longer in the source" (suspend/disable), never with an
      * irreversible course deletion. Worth confirming with the client if a stronger action (e.g.

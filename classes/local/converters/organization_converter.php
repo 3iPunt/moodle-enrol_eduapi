@@ -35,8 +35,8 @@ use stdClass;
 /**
  * Converts an Edu-API Organization entity into a Moodle course category.
  *
- * Per spec.md's entity mapping table: "Organization → Categoría de curso. Jerarquía anidada:
- * organizaciones anidadas en el origen se traducen en categorías anidadas en Moodle." Parent
+ * Per spec.md's entity mapping table: Organization maps to a Moodle course category, with nested
+ * hierarchy - nested organizations in the source translate into nested categories in Moodle. Parent
  * organizations are resolved and created/updated recursively before the child, mirroring
  * enrol_oneroster's update_or_create_category(). `idnumber` is always the Organization's sourcedId,
  * which is how an existing category is matched on subsequent syncs.

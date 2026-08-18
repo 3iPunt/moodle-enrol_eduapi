@@ -50,9 +50,9 @@ class settings {
      * @param   part_of_admin_tree $settings
      * @param   string $roletype The RoleTypeEnum value (exact case, e.g. 'teachingAssistant')
      * @param   array $roleidstoshortnames Map of roleid (string) => role shortname, plus '0' => notmapped
-     * @param   array $displayoptions Map of roleid (string) => display name, plus '0' => "No matricular"
+     * @param   array $displayoptions Map of roleid (string) => display name, plus '0' => "Do not enrol"
      * @param   string|null $defaultshortname The Moodle role shortname to preselect, or null for
-     *                                        "No matricular"
+     *                                        "Do not enrol"
      */
     public static function add_role_mapping(
         part_of_admin_tree $settings,

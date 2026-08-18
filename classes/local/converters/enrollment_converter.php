@@ -30,9 +30,9 @@ use progress_trace;
 /**
  * Converts an Edu-API Enrollment entity into a Moodle enrolment + role assignment.
  *
- * Per spec.md's entity mapping table and "Ciclo de vida y estados" section:
+ * Per spec.md's entity mapping table and "Lifecycle and states" section:
  * - `role` (RoleTypeEnum) maps to a Moodle role id via the `role_mapping_<roletype>` settings, with an
- *   explicit "No matricular" (not mapped) option — see resolve_role_id().
+ *   explicit "Do not enrol" (not mapped) option — see resolve_role_id().
  * - `enrollmentStatus` (17 values) maps to one of 4 actions via the `enrollmentstatus_mapping_<estado>`
  *   settings — see resolve_action().
  * - `recordStatus = deleted` ALWAYS forces unenrolment, overriding whatever the `enrollmentStatus`
@@ -65,7 +65,7 @@ class enrollment_converter {
 
     /**
      * Initial proposed defaults for the `EnrollmentStatusEnum` → action mapping, per spec.md (marked
-     * there as "propuesta inicial, no validada con casos reales de proveedor"). Used only as a
+     * there as "initial proposal, not validated against real provider cases"). Used only as a
      * fallback when the corresponding `enrollmentstatus_mapping_<estado>` setting has not been
      * configured yet (e.g. before development phase 4's settings.php exists, or before an
      * administrator has visited the settings page).
@@ -95,7 +95,7 @@ class enrollment_converter {
     /**
      * Default Moodle role shortname per `RoleTypeEnum` value, per spec.md. Values not present here
      * (aide, guardian, parent, proctor, relative, member, chair, advisor, teachingAssistant) default to
-     * "No matricular" (null) — replicating enrol_oneroster's precedent of leaving those same roles
+     * "Do not enrol" (null) — replicating enrol_oneroster's precedent of leaving those same roles
      * unmapped ("not currently supported").
      */
     const DEFAULT_ROLE_SHORTNAMES = [
@@ -107,12 +107,12 @@ class enrollment_converter {
     /**
      * Resolve the Moodle role id for the given `RoleTypeEnum` value.
      *
-     * Reads the `role_mapping_<roletype>` setting; '0'/empty means "No matricular" and returns null.
+     * Reads the `role_mapping_<roletype>` setting; '0'/empty means "Do not enrol" and returns null.
      * Falls back to DEFAULT_ROLE_SHORTNAMES (resolved to a real role id via a read-only `role` table
      * lookup) when the setting has not been configured yet.
      *
      * @param   string $roletype A RoleTypeEnum value (or an `ext:` extension, which is never mapped)
-     * @return  int|null The Moodle role id, or null if this role should not be enrolled ("No matricular")
+     * @return  int|null The Moodle role id, or null if this role should not be enrolled ("Do not enrol")
      */
     public static function resolve_role_id(string $roletype): ?int {
         global $DB;
@@ -136,8 +136,8 @@ class enrollment_converter {
     /**
      * Resolve the sync action for the given `enrollmentStatus` and `recordStatus` pair.
      *
-     * `recordStatus = deleted` always wins, regardless of the `enrollmentStatus` mapping (spec.md:
-     * "el mapeo por EnrollmentStatusEnum no puede anular esta regla").
+     * `recordStatus = deleted` always wins, regardless of the `enrollmentStatus` mapping (spec.md: "the
+     * EnrollmentStatusEnum mapping cannot override this rule").
      *
      * Pure logic plus a `get_config()` read (no database mutation), so this is fully testable without
      * a live sync.
@@ -193,7 +193,7 @@ class enrollment_converter {
 
         $roleid = self::resolve_role_id($enrollment->get('role'));
         if ($roleid === null) {
-            // This RoleTypeEnum value is mapped to "No matricular": skip this enrolment entirely.
+            // This RoleTypeEnum value is mapped to "Do not enrol": skip this enrolment entirely.
             return;
         }
 

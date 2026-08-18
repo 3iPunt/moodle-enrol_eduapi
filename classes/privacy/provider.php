@@ -37,7 +37,7 @@ use core_privacy\local\request\writer;
 /**
  * Privacy Subsystem implementation for enrol_eduapi.
  *
- * RESOLVED (Jefe de Proyecto, spec.md): a full Privacy API implementation, departing from
+ * RESOLVED (Project Lead, spec.md): a full Privacy API implementation, departing from
  * enrol_oneroster's precedent (a `null_provider` declaring it stores no personal data). There is no
  * enrol_oneroster full-provider precedent to port from here — this was modelled on enrol_paypal's
  * full provider instead (see /enrol/paypal/classes/privacy/provider.php), adapted for this plugin's

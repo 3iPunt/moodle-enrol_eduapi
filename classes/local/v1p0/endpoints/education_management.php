@@ -35,7 +35,7 @@ use enrol_eduapi\local\endpoint;
  * `/courseOfferings/{id}`, `/componentOfferings`, `/componentOfferings/{id}`,
  * `/collectionOfferings`, `/collectionOfferings/{id}`, all under tag `EducationManagement`), not
  * invented. `EducationTemplates` operations from the same tag are intentionally not wired: they are
- * out of scope for this plugin (see spec.md's "Alcance excluido").
+ * out of scope for this plugin (see spec.md's excluded-scope section).
  *
  * The `getCollectionOfferingById`/`getAllCollectionOfferings` commands are declared for structural
  * completeness but are unverified against the development mock provider, which does not implement

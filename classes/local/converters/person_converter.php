@@ -33,12 +33,12 @@ use stdClass;
 /**
  * Resolves an Edu-API Person entity to a Moodle user, and persists the link.
  *
- * Per spec.md's entity mapping table: "Person → Usuario Moodle. Emparejamiento configurable: campo
- * Moodle (email/idnumber/username) frente a atributo origen Edu-API (primaryEmail/sourcedId/un tipo
- * concreto de otherIdentifiers). El enlace resultante se persiste en enrol_eduapi_user_map (sourcedId
- * ↔ userid)."
+ * Per spec.md's entity mapping table: Person maps to a Moodle user, with configurable matching between
+ * a Moodle field (email/idnumber/username) and an Edu-API source attribute (primaryEmail/sourcedId/a
+ * specific otherIdentifiers type). The resulting link is persisted in enrol_eduapi_user_map (sourcedId
+ * <-> userid).
  *
- * RESOLVED (Cliente): what happens when no matching Moodle user is found is configurable via
+ * RESOLVED (Client): what happens when no matching Moodle user is found is configurable via
  * `create_unmatched_users` (settings.php, development phase 4): by default the person is skipped (not
  * synced, matching-only, no accounts created); when enabled, a new Moodle user is provisioned from the
  * Person's data (username/email/name derived from `user_match_source`), the same way
@@ -157,7 +157,7 @@ class person_converter {
     /**
      * Whether a Moodle user should be created for a Person with no matching account, per the
      * `create_unmatched_users` setting. Defaults to false (skip), matching the setting's documented
-     * default of "Omitir personas sin emparejar".
+     * default of "Skip unmatched persons (do not sync them)".
      *
      * @return  bool
      */

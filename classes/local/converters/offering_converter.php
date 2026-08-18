@@ -33,9 +33,9 @@ use stdClass;
  * Converts an Edu-API CourseOffering or ComponentOffering entity into a Moodle course (and, for the
  * level not chosen as the course, into groups within it).
  *
- * Per spec.md's entity mapping table: "CourseOffering o ComponentOffering → Curso Moodle. Configurable
- * vía el ajuste offering_level. El nivel no elegido como curso se convierte en grupos dentro del
- * curso, si sync_groups está activo." `idnumber` is always the offering's sourcedId.
+ * Per spec.md's entity mapping table: CourseOffering or ComponentOffering maps to a Moodle course,
+ * configurable via the offering_level setting - the level not chosen as the course becomes groups
+ * within the course, when sync_groups is active. `idnumber` is always the offering's sourcedId.
  *
  * Also implements the `offering_level` no-migration detection resolved in spec.md: if the setting
  * changes after courses already exist under the previous level, existing courses are left untouched

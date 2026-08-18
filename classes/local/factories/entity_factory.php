@@ -156,9 +156,9 @@ class entity_factory extends abstract_factory implements entity_factory_interfac
      * Get a CollectionOffering entity from a raw row.
      *
      * Not wired to a live endpoint command in this version: CollectionOffering has no consumer in the
-     * plugin (course/component offerings carry everything the converters need — see spec.md's "Alcance
-     * excluido") and is not served by the development mock provider. It exists for structural parity
-     * with the EducationOffering hierarchy documented in plan.md.
+     * plugin (course/component offerings carry everything the converters need — see spec.md's
+     * excluded-scope section) and is not served by the development mock provider. It exists for
+     * structural parity with the EducationOffering hierarchy documented in plan.md.
      *
      * @param   stdClass $data
      * @return  collection_offering_entity

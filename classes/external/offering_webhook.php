@@ -44,7 +44,7 @@ use Throwable;
 /**
  * Edu-API offering webhook: "sync this offering now".
  *
- * Réplica exacta del patrón de enrol_oneroster\external\class_webhook (resolved in spec.md, Q2): a
+ * An exact replica of enrol_oneroster\external\class_webhook's pattern (resolved in spec.md, Q2): a
  * standard Moodle external function, not a payload receiver — the provider does not push data here.
  * It receives an offering's sourcedId (and, optionally, an organization sourcedId to validate the
  * offering against) and triggers a synchronise() filtered to that single offering, reusing the
