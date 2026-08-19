@@ -72,6 +72,13 @@ categories, users and enrolments already created in Moodle remain.
 vendor/bin/phpunit --filter enrol_eduapi
 ```
 
+To develop or test without a real Edu-API provider, use
+[3iPunt/mock-eduapi](https://github.com/3iPunt/mock-eduapi): a zero-dependency
+mock Edu-API v1p0 REST provider with OAuth2 Client Credentials, seed data and
+an interactive dashboard. It ships its own `docker-compose.yml` and documents
+the exact `token_url`/`root_url`/credentials values to configure this plugin
+against it.
+
 ## 📄 Licence
 
 [GNU GPL v3 or later](https://www.gnu.org/copyleft/gpl.html) — 2026 [Tresipunt](https://tresipunt.com) (contacte@tresipunt.com)
