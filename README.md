@@ -29,7 +29,7 @@ plugin, with no manual enrolment interface.
 
 ## Requirements
 
-- Moodle 5.0 or later.
+- Moodle 4.5 or later.
 - No other plugins required.
 - Network access from the Moodle server to the configured Edu-API provider.
 

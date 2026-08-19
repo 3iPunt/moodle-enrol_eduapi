@@ -25,9 +25,9 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->version   = 2026081801;        // The current plugin version (Date: YYYYMMDDXX).
-$plugin->requires  = 2025041400;        // Requires Moodle 5.0 or later (CI-verified range).
+$plugin->requires  = 2024100700;        // Requires Moodle 4.5 LTS or later (CI-verified range).
 $plugin->supported = [
-    500,
+    405,
     502,
 ];
 $plugin->component = 'enrol_eduapi';    // Full name of the plugin (used for diagnostics).
