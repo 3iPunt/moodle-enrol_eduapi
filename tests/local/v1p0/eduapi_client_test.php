@@ -153,11 +153,13 @@ final class eduapi_client_test extends \advanced_testcase {
         $container = $this->createMock(container::class);
         $collection = $this->make_collection($buildsessions($container), $failatposition);
 
-        $factory = new class($collection) implements collection_factory_interface {
+        $factory = new class ($collection) implements collection_factory_interface {
             /** @var fake_paginated_collection */
             private $collection;
 
             /**
+             * Constructor.
+             *
              * @param   fake_paginated_collection $collection
              */
             public function __construct(fake_paginated_collection $collection) {
@@ -165,6 +167,8 @@ final class eduapi_client_test extends \advanced_testcase {
             }
 
             /**
+             * Get the fake academic sessions collection.
+             *
              * @return  fake_paginated_collection
              */
             public function get_academic_sessions() {
