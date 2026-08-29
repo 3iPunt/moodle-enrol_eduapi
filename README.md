@@ -84,6 +84,19 @@ an interactive dashboard. It ships its own `docker-compose.yml` and documents
 the exact `token_url`/`root_url`/credentials values to configure this plugin
 against it.
 
+## 🙏 Acknowledgements
+
+The architecture of this plugin (OAuth2 client, container and factories,
+entity/collection pipeline, converters, and the test-connection flow) is
+modelled on [enrol_oneroster](https://github.com/moodlehq/moodle-enrol_oneroster)
+by Andrew Nicols and Moodle HQ. Several features (the per-offering webhook,
+the JSON progress trace, inactive record exclusion, per-item fault tolerance)
+were inspired by the
+[universis-project fork](https://github.com/universis-project/moodle-enrol_oneroster)
+of that plugin. Both are released under the GNU GPL v3 or later, as is this
+plugin. The code here is an independent implementation for the Edu-API v1p0
+specification, not a fork.
+
 ## 📄 Licence
 
 [GNU GPL v3 or later](https://www.gnu.org/copyleft/gpl.html) — 2026 [Tresipunt](https://tresipunt.com) (contacte@tresipunt.com)
