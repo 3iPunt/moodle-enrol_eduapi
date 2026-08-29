@@ -1,6 +1,10 @@
 # Changes
 
-## Unreleased
+## 1.1.0 (2026-08-29)
+
+Three synchronisation improvements ported from the enrol_oneroster ecosystem
+and adapted to Edu-API v1p0. All backward compatible: the new settings are
+optional and there are no database changes.
 
 - Added optional `user_field_department_source` and `user_field_institution_source`
   settings to map a Person's `extensions.<key>` or `otherIdentifiers.<identifierType>`
