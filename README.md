@@ -7,8 +7,14 @@ plugin, with no manual enrolment interface.
 
 ## Certification
 
+<a href="https://site.imsglobal.org/certifications/3punt/moodle-eduapi"><img src="https://site.imsglobal.org/sites/default/files/media/images/logo_ims/1edtech_trusted-apps-certified.svg" alt="1EdTech Certified" border="0" width="160"></a>
+
 The plugin is certified by 1EdTech as an **Edu-API v1.0** conformant consumer.
 Product listing: <https://site.imsglobal.org/certifications/3punt/moodle-eduapi>
+
+The certification logo is used under the 1EdTech logo licence and links to the
+product's entry in the 1EdTech TrustEd Apps Directory, as required by the
+1EdTech Certification Process and Branding Guidelines.
 
 ## What it does
 
