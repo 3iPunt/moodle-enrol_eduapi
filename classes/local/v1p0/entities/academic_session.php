@@ -64,4 +64,16 @@ class academic_session extends entity {
     protected static function get_operation_id(container_interface $container): string {
         return academic_session_management::getAcademicSessionById;
     }
+
+    /**
+     * Get the sourcedId(s) of the child AcademicSession(s), if any.
+     *
+     * Per the v1p0 JSON schema, `children` is an array of plain sourcedId strings: any entry that is
+     * not a string is ignored defensively.
+     *
+     * @return  string[]
+     */
+    public function get_children_ids(): array {
+        return array_values(array_filter((array) ($this->get('children') ?? []), 'is_string'));
+    }
 }

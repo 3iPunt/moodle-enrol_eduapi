@@ -174,14 +174,15 @@ class eduapi_client {
         }
 
         $sessionid = get_config('enrol_eduapi', 'datasync_academic_session');
+        $sessionids = $this->resolve_academic_session_scope($sessionid, $trace, $errors);
         $offeringlevel = offering_converter::get_configured_offering_level();
         $touchedcourseidnumbers = [];
 
         if ($offeringlevel === offering_converter::LEVEL_COURSE_OFFERING) {
             $errors += $this->iterate_safely(
                 $this->container->get_collection_factory()->get_course_offerings(),
-                function ($courseoffering) use ($organizationids, $sessionid, &$touchedcourseidnumbers, $trace) {
-                    if (!$this->offering_in_scope($courseoffering, $organizationids, $sessionid)) {
+                function ($courseoffering) use ($organizationids, $sessionids, &$touchedcourseidnumbers, $trace) {
+                    if (!$this->offering_in_scope($courseoffering, $organizationids, $sessionids)) {
                         return 0;
                     }
                     return $this->sync_offering($courseoffering, $touchedcourseidnumbers, $trace, true);
@@ -192,8 +193,8 @@ class eduapi_client {
         } else {
             $errors += $this->iterate_safely(
                 $this->container->get_collection_factory()->get_component_offerings(),
-                function ($componentoffering) use ($organizationids, $sessionid, &$touchedcourseidnumbers, $trace) {
-                    if (!$this->offering_in_scope($componentoffering, $organizationids, $sessionid)) {
+                function ($componentoffering) use ($organizationids, $sessionids, &$touchedcourseidnumbers, $trace) {
+                    if (!$this->offering_in_scope($componentoffering, $organizationids, $sessionids)) {
                         return 0;
                     }
                     return $this->sync_offering($componentoffering, $touchedcourseidnumbers, $trace, false);
@@ -216,19 +217,96 @@ class eduapi_client {
      *
      * @param   education_offering $offering
      * @param   string[] $organizationids
-     * @param   string|false $sessionid
+     * @param   string[] $sessionids Accepted academic session ids, as resolved by
+     *                               resolve_academic_session_scope(); an empty array means no filtering
      * @return  bool
      */
-    protected function offering_in_scope(education_offering $offering, array $organizationids, $sessionid): bool {
+    protected function offering_in_scope(education_offering $offering, array $organizationids, array $sessionids): bool {
         if (!in_array($offering->get_organization_id(), $organizationids, true)) {
             return false;
         }
 
-        if (!empty($sessionid) && $offering->get_academic_session_id() !== $sessionid) {
+        if (!empty($sessionids) && !in_array($offering->get_academic_session_id(), $sessionids, true)) {
             return false;
         }
 
         return !$this->is_excluded_by_record_status($offering);
+    }
+
+    /**
+     * Resolve the configured `datasync_academic_session` setting into the full set of accepted academic
+     * session ids for this sync run: the configured session id itself plus every descendant session
+     * (children, grandchildren, ...).
+     *
+     * Fetches the full academic sessions collection ONCE - the same collection testconnection.php:96
+     * iterates to populate the setting - and builds an in-memory `sourcedId => child ids` map from it,
+     * then walks that map breadth-first from the configured id with a visited set. Descendants are
+     * collected regardless of `sessionType` - a `schoolYear` typically has `semester` children, a
+     * `semester` may itself have `term` children, and this method does not special-case any of those
+     * enum values. With a finite in-memory map, the visited set alone guarantees the walk terminates, so
+     * no depth bound is needed.
+     *
+     * If the collection cannot be (fully) fetched, $errors is incremented and the walk continues over
+     * whatever part of the map was collected before the failure - the sync must never abort because of
+     * it. If the configured id is not present in the fetched map at all (whether because fetching it
+     * failed, or because it genuinely is not there), the result falls back to the configured id alone.
+     *
+     * @param   string|false $sessionid The configured `datasync_academic_session` value
+     * @param   progress_trace $trace
+     * @param   int $errors Error accumulator, incremented (by reference) on a collection fetch failure
+     * @return  string[] Accepted session ids, or [] if $sessionid is empty/false (no filtering)
+     */
+    protected function resolve_academic_session_scope($sessionid, progress_trace $trace, int &$errors): array {
+        if (empty($sessionid)) {
+            return [];
+        }
+
+        $childrenbyid = [];
+
+        try {
+            foreach ($this->container->get_collection_factory()->get_academic_sessions() as $session) {
+                $childrenbyid[$session->get_id()] = $session->get_children_ids();
+            }
+        } catch (Throwable $e) {
+            $errors++;
+            $trace->output(
+                "Academic sessions could not be fully fetched while expanding '{$sessionid}': " . $e->getMessage() .
+                '. Expansion may be incomplete.'
+            );
+        }
+
+        if (!array_key_exists($sessionid, $childrenbyid)) {
+            $trace->output(
+                "Academic session '{$sessionid}' was not found among the fetched academic sessions: " .
+                'falling back to exact match.'
+            );
+            return [$sessionid];
+        }
+
+        $visited = [$sessionid => true];
+        $queue = [$sessionid];
+
+        while (!empty($queue)) {
+            $currentid = array_shift($queue);
+            foreach ($childrenbyid[$currentid] ?? [] as $childid) {
+                if (isset($visited[$childid])) {
+                    continue;
+                }
+                $visited[$childid] = true;
+                $queue[] = $childid;
+            }
+        }
+
+        $sessionids = array_keys($visited);
+
+        if (count($sessionids) > 1) {
+            $trace->output(
+                "Academic session '{$sessionid}' expanded to " . count($sessionids) . ' sessions: ' .
+                implode(', ', $sessionids)
+            );
+        }
+
+        return $sessionids;
     }
 
     /**

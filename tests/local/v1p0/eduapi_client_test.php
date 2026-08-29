@@ -24,10 +24,14 @@
 
 namespace enrol_eduapi\local\v1p0;
 
+use enrol_eduapi\local\interfaces\collection_factory as collection_factory_interface;
+use enrol_eduapi\local\v1p0\entities\academic_session;
+use enrol_eduapi\local\v1p0\entities\course_offering;
 use enrol_eduapi\tests\fixtures\fake_paginated_collection;
 use IteratorAggregate;
 use progress_trace;
 use ReflectionClass;
+use ReflectionMethod;
 use RuntimeException;
 
 /**
@@ -35,6 +39,10 @@ use RuntimeException;
  * "single transient failure aborts the whole sync" defect. A plain foreach over a paginated (Generator
  * backed) collection cannot catch a failure raised while ADVANCING the iterator (i.e. fetching the
  * next page), only failures inside the loop body - iterate_safely() exists to catch both.
+ *
+ * Also covers eduapi_client::resolve_academic_session_scope() and eduapi_client::offering_in_scope():
+ * the academic-session-scope expansion that lets a configured schoolYear session also accept offerings
+ * tagged with one of its child semesters, instead of only an exact sourcedId match.
  *
  * @package    enrol_eduapi
  * @copyright  2026 3iPunt (contacte@tresipunt.com)
@@ -94,6 +102,79 @@ final class eduapi_client_test extends \advanced_testcase {
         });
 
         return $trace;
+    }
+
+    /**
+     * Invoke a protected/private method via reflection.
+     *
+     * No setAccessible(true) call is needed: CI runs PHP 8.3+, where accessibility checks for
+     * Reflection calls were removed (PHP 8.1), making setAccessible() a no-op.
+     *
+     * $args is a plain array, not a variadic ...$args: a reference element (`&$var`) inside an array
+     * keeps its reference identity even after the array is copied into this method's own $args
+     * parameter, so a caller needing a by-reference parameter observed afterward (such as
+     * resolve_academic_session_scope()'s $errors) can supply it as `&$errors` inside the array and read
+     * it back once this method returns. A true `...$args` variadic cannot do this: PHP always copies
+     * variadic arguments by value on capture, which is also why PHP 8.3+ warns if you try.
+     *
+     * @param   object $object
+     * @param   string $method
+     * @param   array $args
+     * @return  mixed
+     */
+    protected function invoke_protected(object $object, string $method, array $args) {
+        $ref = new ReflectionMethod($object, $method);
+
+        return $ref->invokeArgs($object, $args);
+    }
+
+    /**
+     * Build a container whose collection factory's get_academic_sessions() yields the academic_session
+     * entities returned by $buildsessions, as a fake_paginated_collection (optionally failing while
+     * advancing to $failatposition). This is the same collection_factory::get_academic_sessions() call
+     * testconnection.php:96 makes, and it is fetched exactly once by resolve_academic_session_scope().
+     *
+     * $buildsessions receives the container being built (entities need it to construct, even though a
+     * fully pre-seeded entity never uses it to fetch), and must return an academic_session[].
+     *
+     * collection_factory (local\interfaces\collection_factory) is a marker interface with no declared
+     * methods, so it cannot be mocked with PHPUnit's createMock()+method(); a small hand-written stub
+     * implementing it stands in instead.
+     *
+     * @param   callable $buildsessions function(container $container): academic_session[]
+     * @param   int|null $failatposition Throw while iterating to this position (0-based; 0 throws
+     *                                   before any item is yielded), or never if null
+     * @return  container
+     */
+    protected function mock_container_with_academic_sessions_collection(
+        callable $buildsessions,
+        ?int $failatposition = null
+    ): container {
+        $container = $this->createMock(container::class);
+        $collection = $this->make_collection($buildsessions($container), $failatposition);
+
+        $factory = new class($collection) implements collection_factory_interface {
+            /** @var fake_paginated_collection */
+            private $collection;
+
+            /**
+             * @param   fake_paginated_collection $collection
+             */
+            public function __construct(fake_paginated_collection $collection) {
+                $this->collection = $collection;
+            }
+
+            /**
+             * @return  fake_paginated_collection
+             */
+            public function get_academic_sessions() {
+                return $this->collection;
+            }
+        };
+
+        $container->method('get_collection_factory')->willReturn($factory);
+
+        return $container;
     }
 
     /**
@@ -186,5 +267,195 @@ final class eduapi_client_test extends \advanced_testcase {
 
         $this->assertSame(['a', 'b', 'c', 'd'], $processed);
         $this->assertSame(0, $errors);
+    }
+
+    /**
+     * A configured schoolYear session expands to itself plus its child semesters: an offering tagged
+     * with a child semester id, or with the schoolYear id itself, is in scope; one tagged with an
+     * unrelated session id is not.
+     */
+    public function test_schoolyear_scope_includes_child_semesters_but_not_unrelated_sessions(): void {
+        $this->resetAfterTest();
+
+        $container = $this->mock_container_with_academic_sessions_collection(function ($container) {
+            return [
+                new academic_session($container, 'sy-1', (object) ['sourcedId' => 'sy-1', 'children' => ['sem-1', 'sem-2']]),
+                new academic_session($container, 'sem-1', (object) ['sourcedId' => 'sem-1', 'children' => []]),
+                new academic_session($container, 'sem-2', (object) ['sourcedId' => 'sem-2', 'children' => []]),
+            ];
+        });
+
+        $client = new eduapi_client($container);
+        $messages = [];
+        $errors = 0;
+        $sessionids = $this->invoke_protected(
+            $client,
+            'resolve_academic_session_scope',
+            ['sy-1', $this->capturing_trace($messages), &$errors]
+        );
+
+        $this->assertEqualsCanonicalizing(['sy-1', 'sem-1', 'sem-2'], $sessionids);
+        $this->assertStringContainsString('expanded to 3 sessions', implode(' ', $messages));
+
+        $offeringinsem1 = new course_offering($container, 'off-1', (object) [
+            'sourcedId' => 'off-1',
+            'organization' => 'org-a',
+            'academicSession' => 'sem-1',
+        ]);
+        $offeringinschoolyear = new course_offering($container, 'off-2', (object) [
+            'sourcedId' => 'off-2',
+            'organization' => 'org-a',
+            'academicSession' => 'sy-1',
+        ]);
+        $offeringunrelated = new course_offering($container, 'off-3', (object) [
+            'sourcedId' => 'off-3',
+            'organization' => 'org-a',
+            'academicSession' => 'other-session',
+        ]);
+
+        $this->assertTrue($this->invoke_protected($client, 'offering_in_scope', [$offeringinsem1, ['org-a'], $sessionids]));
+        $this->assertTrue($this->invoke_protected($client, 'offering_in_scope', [$offeringinschoolyear, ['org-a'], $sessionids]));
+        $this->assertFalse($this->invoke_protected($client, 'offering_in_scope', [$offeringunrelated, ['org-a'], $sessionids]));
+    }
+
+    /**
+     * A configured semester with no children resolves to exact match only.
+     */
+    public function test_semester_with_no_children_resolves_to_exact_match_only(): void {
+        $this->resetAfterTest();
+
+        $container = $this->mock_container_with_academic_sessions_collection(function ($container) {
+            return [
+                new academic_session($container, 'sem-1', (object) ['sourcedId' => 'sem-1', 'children' => []]),
+            ];
+        });
+
+        $client = new eduapi_client($container);
+        $messages = [];
+        $errors = 0;
+        $sessionids = $this->invoke_protected(
+            $client,
+            'resolve_academic_session_scope',
+            ['sem-1', $this->capturing_trace($messages), &$errors]
+        );
+
+        $this->assertSame(['sem-1'], $sessionids);
+
+        $offeringinsem1 = new course_offering($container, 'off-1', (object) [
+            'sourcedId' => 'off-1',
+            'organization' => 'org-a',
+            'academicSession' => 'sem-1',
+        ]);
+        $offeringinsem2 = new course_offering($container, 'off-2', (object) [
+            'sourcedId' => 'off-2',
+            'organization' => 'org-a',
+            'academicSession' => 'sem-2',
+        ]);
+
+        $this->assertTrue($this->invoke_protected($client, 'offering_in_scope', [$offeringinsem1, ['org-a'], $sessionids]));
+        $this->assertFalse($this->invoke_protected($client, 'offering_in_scope', [$offeringinsem2, ['org-a'], $sessionids]));
+    }
+
+    /**
+     * No configured academic session resolves to an empty scope, and offering_in_scope() then accepts
+     * any academic session (only the organization and record-status checks still apply). The academic
+     * sessions collection is never even iterated in this case.
+     */
+    public function test_no_configured_session_means_no_session_filtering(): void {
+        $this->resetAfterTest();
+
+        $container = $this->mock_container_with_academic_sessions_collection(fn() => []);
+        $client = new eduapi_client($container);
+        $messages = [];
+        $errors = 0;
+
+        $sessionids = $this->invoke_protected(
+            $client,
+            'resolve_academic_session_scope',
+            [false, $this->capturing_trace($messages), &$errors]
+        );
+
+        $this->assertSame([], $sessionids);
+        $this->assertEmpty($messages);
+
+        $offering = new course_offering($container, 'off-1', (object) [
+            'sourcedId' => 'off-1',
+            'organization' => 'org-a',
+            'academicSession' => 'whatever-session',
+        ]);
+
+        $this->assertTrue($this->invoke_protected($client, 'offering_in_scope', [$offering, ['org-a'], $sessionids]));
+    }
+
+    /**
+     * If the configured session id is not present among the fetched academic sessions at all (no fetch
+     * failure, it is just genuinely not there), the result falls back to the configured id alone, with
+     * a trace note.
+     */
+    public function test_configured_session_not_present_in_collection_falls_back_to_exact_match(): void {
+        $container = $this->mock_container_with_academic_sessions_collection(function ($container) {
+            return [
+                new academic_session($container, 'other-1', (object) ['sourcedId' => 'other-1', 'children' => []]),
+            ];
+        });
+
+        $client = new eduapi_client($container);
+        $messages = [];
+        $errors = 0;
+        $sessionids = $this->invoke_protected(
+            $client,
+            'resolve_academic_session_scope',
+            ['missing-id', $this->capturing_trace($messages), &$errors]
+        );
+
+        $this->assertSame(['missing-id'], $sessionids);
+        $this->assertNotEmpty($messages);
+    }
+
+    /**
+     * A genuine failure fetching the academic sessions collection (the very first page fetch throws,
+     * before any item is yielded) increments $errors by exactly one, logs that expansion may be
+     * incomplete, and falls back to exact match on the configured id.
+     */
+    public function test_academic_sessions_fetch_failure_increments_errors_and_falls_back_to_exact_match(): void {
+        $container = $this->mock_container_with_academic_sessions_collection(fn() => [], 0);
+        $client = new eduapi_client($container);
+        $messages = [];
+        $errors = 0;
+
+        $sessionids = $this->invoke_protected(
+            $client,
+            'resolve_academic_session_scope',
+            ['sy-broken', $this->capturing_trace($messages), &$errors]
+        );
+
+        $this->assertSame(['sy-broken'], $sessionids);
+        $this->assertSame(1, $errors);
+        $this->assertStringContainsString('Expansion may be incomplete', implode(' ', $messages));
+    }
+
+    /**
+     * A cycle in the children map (A's child is B, whose child is A) does not loop forever: the
+     * visited-set guard stops expansion once every reachable session has been seen. With a finite
+     * in-memory map built from a single collection fetch, no depth bound is needed for this.
+     */
+    public function test_cycle_in_children_does_not_loop_forever(): void {
+        $container = $this->mock_container_with_academic_sessions_collection(function ($container) {
+            return [
+                new academic_session($container, 'a', (object) ['sourcedId' => 'a', 'children' => ['b']]),
+                new academic_session($container, 'b', (object) ['sourcedId' => 'b', 'children' => ['a']]),
+            ];
+        });
+
+        $client = new eduapi_client($container);
+        $messages = [];
+        $errors = 0;
+        $sessionids = $this->invoke_protected(
+            $client,
+            'resolve_academic_session_scope',
+            ['a', $this->capturing_trace($messages), &$errors]
+        );
+
+        $this->assertEqualsCanonicalizing(['a', 'b'], $sessionids);
     }
 }

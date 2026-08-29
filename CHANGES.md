@@ -1,5 +1,13 @@
 # Changes
 
+## Unreleased
+
+- Fixed the data sync silently matching zero offerings when
+  `datasync_academic_session` is configured with a `schoolYear` (or any
+  parent) session while offerings are tagged with a child `semester`
+  session: the configured session now also accepts offerings tagged with
+  any of its descendant sessions.
+
 ## 1.0.0 (2026-08-29)
 
 First stable release. The plugin is certified by 1EdTech as an Edu-API v1.0

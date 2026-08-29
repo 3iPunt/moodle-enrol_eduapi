@@ -40,7 +40,10 @@ class fake_paginated_iterator implements Iterator {
     /** @var array The items to yield, reindexed from 0 */
     protected $items;
 
-    /** @var int|null The 0-based position at which to throw while advancing, or null to never throw */
+    /**
+     * @var int|null The 0-based position at which to throw while advancing, or never if null. 0 means
+     *               the very first page fetch fails, before any item is ever yielded.
+     */
     protected $failatposition;
 
     /** @var int The current position */
@@ -50,8 +53,9 @@ class fake_paginated_iterator implements Iterator {
      * Create a new fake paginated iterator.
      *
      * @param   array $items The items to yield
-     * @param   int|null $failatposition Throw when the iterator advances to this position (0-based),
-     *                                   or never if null
+     * @param   int|null $failatposition Throw when the iterator advances to this position (0-based;
+     *                                   0 throws immediately, before any item is yielded), or never if
+     *                                   null
      */
     public function __construct(array $items, ?int $failatposition) {
         $this->items = array_values($items);
@@ -89,10 +93,16 @@ class fake_paginated_iterator implements Iterator {
     }
 
     /**
-     * Reset to the first position.
+     * Reset to the first position, throwing if position 0 is the configured failure point - simulating
+     * the very first page fetch failing, before any item is ever yielded.
+     *
+     * @throws  RuntimeException If the configured failure position is 0
      */
     public function rewind(): void {
         $this->position = 0;
+        if ($this->failatposition === 0) {
+            throw new RuntimeException('Simulated page-fetch failure fetching the first page');
+        }
     }
 
     /**

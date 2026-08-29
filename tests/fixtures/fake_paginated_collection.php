@@ -50,8 +50,9 @@ class fake_paginated_collection implements IteratorAggregate {
      * Create a new fake paginated collection.
      *
      * @param   array $items The items to yield
-     * @param   int|null $failatposition Throw when the iterator advances to this position (0-based),
-     *                                   or never if null
+     * @param   int|null $failatposition Throw when the iterator advances to this position (0-based;
+     *                                   0 throws immediately, before any item is yielded), or never if
+     *                                   null
      */
     public function __construct(array $items, ?int $failatposition = null) {
         $this->items = $items;
