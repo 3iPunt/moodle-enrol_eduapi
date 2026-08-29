@@ -24,9 +24,16 @@
 
 namespace enrol_eduapi\local\converters;
 
+use enrol_eduapi\local\interfaces\container as container_interface;
+use enrol_eduapi\local\interfaces\entity_factory as entity_factory_interface;
+use enrol_eduapi\local\v1p0\entities\enrollment;
+use enrol_eduapi\local\v1p0\entities\person;
+use enrol_eduapi\tests\fixtures\entity_fixtures_trait;
+
 /**
  * Tests for enrollment_converter::resolve_action() - the EnrollmentStatusEnum -> action mapping and
- * the recordStatus = deleted override.
+ * the recordStatus = deleted override - and for convert_to_group_membership(), which keeps a
+ * ComponentOffering's Moodle group membership in sync with its own enrolments.
  *
  * @package    enrol_eduapi
  * @copyright  2026 3iPunt (contacte@tresipunt.com)
@@ -34,6 +41,86 @@ namespace enrol_eduapi\local\converters;
  * @covers     \enrol_eduapi\local\converters\enrollment_converter
  */
 final class enrollment_converter_test extends \advanced_testcase {
+    use entity_fixtures_trait;
+
+    /**
+     * Build a course, a group inside it, an enrol_eduapi instance for the course, and a user -
+     * optionally enrolled in the course - for convert_to_group_membership() tests.
+     *
+     * @param   bool $enroluser Whether to enrol the created user in the course
+     * @return  array{course: \stdClass, group: \stdClass, user: \stdClass, instanceid: int}
+     */
+    protected function create_group_scenario(bool $enroluser = true): array {
+        $generator = $this->getDataGenerator();
+
+        $course = $generator->create_course();
+        $group = $generator->create_group(['courseid' => $course->id]);
+        $user = $generator->create_user();
+
+        $plugin = enrol_get_plugin('eduapi');
+        $instanceid = $plugin->add_instance($course, ['status' => ENROL_INSTANCE_ENABLED]);
+
+        if ($enroluser) {
+            $generator->enrol_user($user->id, $course->id);
+        }
+
+        return [
+            'course' => $course,
+            'group' => $group,
+            'user' => $user,
+            'instanceid' => $instanceid,
+        ];
+    }
+
+    /**
+     * Build an Enrollment entity pre-seeded with data, whose get_person() resolves to $person without
+     * any network fetch.
+     *
+     * @param   string $sourcedid
+     * @param   person $person
+     * @param   array $data Raw fields, merged over sensible defaults
+     * @return  enrollment
+     */
+    protected function make_enrollment(string $sourcedid, person $person, array $data = []): enrollment {
+        $factory = new class ($person) implements entity_factory_interface {
+            /** @var person The person to return from every fetch_person_by_id() call */
+            private $person;
+
+            /**
+             * Constructor.
+             *
+             * @param   person $person
+             */
+            public function __construct(person $person) {
+                $this->person = $person;
+            }
+
+            /**
+             * Get the fake person for any fetch_person_by_id() call.
+             *
+             * @param   string $id
+             * @return  person
+             */
+            public function fetch_person_by_id(string $id): person {
+                return $this->person;
+            }
+        };
+
+        $container = $this->createMock(container_interface::class);
+        $container->method('get_entity_factory')->willReturn($factory);
+
+        $defaults = [
+            'sourcedId' => $sourcedid,
+            'recordStatus' => 'active',
+            'enrollmentStatus' => 'enrolled',
+            'person' => $person->get_id(),
+            'role' => 'student',
+            'educationOffering' => 'component-1',
+        ];
+
+        return new enrollment($container, $sourcedid, (object) array_merge($defaults, $data));
+    }
+
     /**
      * Data provider: every EnrollmentStatusEnum value covered by DEFAULT_STATUS_ACTIONS, paired with
      * the action it should resolve to when no `enrollmentstatus_mapping_<estado>` setting has been
@@ -159,5 +246,225 @@ final class enrollment_converter_test extends \advanced_testcase {
             enrollment_converter::ACTION_UNENROL,
             enrollment_converter::resolve_action('ext:someVendorExtension', 'deleted')
         );
+    }
+
+    /**
+     * A user enrolled in the course, with an active enrolment mapped to enrol_active, is added to the
+     * component's group, tagged with this plugin's component/itemid (the course's enrol_eduapi
+     * instance id) so the membership is identifiable as automatically managed.
+     */
+    public function test_convert_to_group_membership_adds_enrolled_user(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $scenario = $this->create_group_scenario();
+
+        person_converter::save_mapping('person-1', $scenario['user']->id);
+        $enrollment = $this->make_enrollment('enr-1', $this->make_person('person-1'));
+
+        $messages = [];
+        enrollment_converter::convert_to_group_membership($enrollment, $scenario['group'], $this->capturing_trace($messages));
+
+        $member = $DB->get_record('groups_members', [
+            'groupid' => $scenario['group']->id,
+            'userid' => $scenario['user']->id,
+        ]);
+        $this->assertNotFalse($member);
+        $this->assertSame('enrol_eduapi', $member->component);
+        $this->assertSame((int) $scenario['instanceid'], (int) $member->itemid);
+    }
+
+    /**
+     * A user already a member of the group, with an active enrolment, stays a member and no exception
+     * is raised for the duplicate membership.
+     */
+    public function test_convert_to_group_membership_is_idempotent_for_existing_member(): void {
+        global $CFG, $DB;
+
+        $this->resetAfterTest();
+        require_once($CFG->dirroot . '/group/lib.php');
+        $scenario = $this->create_group_scenario();
+        groups_add_member($scenario['group']->id, $scenario['user']->id);
+
+        person_converter::save_mapping('person-1', $scenario['user']->id);
+        $enrollment = $this->make_enrollment('enr-1', $this->make_person('person-1'));
+
+        $messages = [];
+        enrollment_converter::convert_to_group_membership($enrollment, $scenario['group'], $this->capturing_trace($messages));
+
+        $this->assertTrue($DB->record_exists('groups_members', [
+            'groupid' => $scenario['group']->id,
+            'userid' => $scenario['user']->id,
+        ]));
+    }
+
+    /**
+     * An enrolment mapped to unenrol (e.g. enrollmentStatus 'withdrawn') removes an existing group
+     * member.
+     */
+    public function test_convert_to_group_membership_removes_withdrawn_member(): void {
+        global $CFG, $DB;
+
+        $this->resetAfterTest();
+        require_once($CFG->dirroot . '/group/lib.php');
+        $scenario = $this->create_group_scenario();
+        groups_add_member($scenario['group']->id, $scenario['user']->id);
+
+        person_converter::save_mapping('person-1', $scenario['user']->id);
+        $enrollment = $this->make_enrollment('enr-1', $this->make_person('person-1'), [
+            'enrollmentStatus' => 'withdrawn',
+        ]);
+
+        $messages = [];
+        enrollment_converter::convert_to_group_membership($enrollment, $scenario['group'], $this->capturing_trace($messages));
+
+        $this->assertFalse($DB->record_exists('groups_members', [
+            'groupid' => $scenario['group']->id,
+            'userid' => $scenario['user']->id,
+        ]));
+    }
+
+    /**
+     * A recordStatus of 'deleted' removes an existing group member, overriding an otherwise active
+     * enrollmentStatus - consistent with resolve_action()'s deleted-always-wins rule.
+     */
+    public function test_convert_to_group_membership_removes_member_on_deleted_record_status(): void {
+        global $CFG, $DB;
+
+        $this->resetAfterTest();
+        require_once($CFG->dirroot . '/group/lib.php');
+        $scenario = $this->create_group_scenario();
+        groups_add_member($scenario['group']->id, $scenario['user']->id);
+
+        person_converter::save_mapping('person-1', $scenario['user']->id);
+        $enrollment = $this->make_enrollment('enr-1', $this->make_person('person-1'), [
+            'recordStatus' => 'deleted',
+        ]);
+
+        $messages = [];
+        enrollment_converter::convert_to_group_membership($enrollment, $scenario['group'], $this->capturing_trace($messages));
+
+        $this->assertFalse($DB->record_exists('groups_members', [
+            'groupid' => $scenario['group']->id,
+            'userid' => $scenario['user']->id,
+        ]));
+    }
+
+    /**
+     * An active enrolment for a user who is NOT enrolled in the course is not added to the group
+     * (groups_add_member() itself refuses it), and the trace explains why.
+     */
+    public function test_convert_to_group_membership_skips_user_not_enrolled_in_course(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $scenario = $this->create_group_scenario(false);
+
+        person_converter::save_mapping('person-1', $scenario['user']->id);
+        $enrollment = $this->make_enrollment('enr-1', $this->make_person('person-1'));
+
+        $messages = [];
+        enrollment_converter::convert_to_group_membership($enrollment, $scenario['group'], $this->capturing_trace($messages));
+
+        $this->assertFalse($DB->record_exists('groups_members', [
+            'groupid' => $scenario['group']->id,
+            'userid' => $scenario['user']->id,
+        ]));
+        $this->assertStringContainsString('not enrolled', implode(' ', $messages));
+    }
+
+    /**
+     * An enrolment whose Person has no stored sourcedId <-> userid mapping is skipped without raising
+     * an exception and without adding any group member: this method never falls back to
+     * person_converter::convert() to match or create one.
+     */
+    public function test_convert_to_group_membership_skips_unresolvable_person(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $scenario = $this->create_group_scenario();
+
+        // Deliberately no person_converter::save_mapping() call: 'unmatched-person' has no mapping.
+        $enrollment = $this->make_enrollment('enr-1', $this->make_person('unmatched-person'));
+
+        $messages = [];
+        enrollment_converter::convert_to_group_membership($enrollment, $scenario['group'], $this->capturing_trace($messages));
+
+        $this->assertSame(0, $DB->count_records('groups_members', ['groupid' => $scenario['group']->id]));
+        $this->assertStringContainsString('not mapped to a Moodle user', implode(' ', $messages));
+    }
+
+    /**
+     * A role (RoleTypeEnum) mapped to "Do not enrol" (e.g. 'guardian', which has no default mapping)
+     * blocks the group membership entirely: an otherwise-active enrolment is not added.
+     */
+    public function test_convert_to_group_membership_skips_unmapped_role_and_does_not_add(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $scenario = $this->create_group_scenario();
+
+        person_converter::save_mapping('person-1', $scenario['user']->id);
+        $enrollment = $this->make_enrollment('enr-1', $this->make_person('person-1'), [
+            'role' => 'guardian',
+        ]);
+
+        $messages = [];
+        enrollment_converter::convert_to_group_membership($enrollment, $scenario['group'], $this->capturing_trace($messages));
+
+        $this->assertSame(0, $DB->count_records('groups_members', ['groupid' => $scenario['group']->id]));
+    }
+
+    /**
+     * A role mapped to "Do not enrol" also blocks removal: an existing member is left untouched even
+     * when the enrolment would otherwise resolve to unenrol.
+     */
+    public function test_convert_to_group_membership_skips_unmapped_role_and_does_not_remove_existing_member(): void {
+        global $CFG, $DB;
+
+        $this->resetAfterTest();
+        require_once($CFG->dirroot . '/group/lib.php');
+        $scenario = $this->create_group_scenario();
+        groups_add_member($scenario['group']->id, $scenario['user']->id);
+
+        person_converter::save_mapping('person-1', $scenario['user']->id);
+        $enrollment = $this->make_enrollment('enr-1', $this->make_person('person-1'), [
+            'role' => 'guardian',
+            'enrollmentStatus' => 'withdrawn',
+        ]);
+
+        $messages = [];
+        enrollment_converter::convert_to_group_membership($enrollment, $scenario['group'], $this->capturing_trace($messages));
+
+        $this->assertTrue($DB->record_exists('groups_members', [
+            'groupid' => $scenario['group']->id,
+            'userid' => $scenario['user']->id,
+        ]));
+    }
+
+    /**
+     * Even with create_unmatched_users active, the group membership pass never provisions a Moodle
+     * user: it only ever reads an existing sourcedId <-> userid mapping.
+     */
+    public function test_convert_to_group_membership_never_creates_a_user(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        set_config('user_match_moodlefield', 'email', 'enrol_eduapi');
+        set_config('user_match_source', 'primaryEmail', 'enrol_eduapi');
+        set_config('create_unmatched_users', 1, 'enrol_eduapi');
+
+        $scenario = $this->create_group_scenario(false);
+        $usercountbefore = $DB->count_records('user');
+
+        $enrollment = $this->make_enrollment('enr-1', $this->make_person('unmapped-person', [
+            'primaryEmail' => (object) ['email' => 'nobody@example.org'],
+        ]));
+
+        $messages = [];
+        enrollment_converter::convert_to_group_membership($enrollment, $scenario['group'], $this->capturing_trace($messages));
+
+        $this->assertEquals($usercountbefore, $DB->count_records('user'));
+        $this->assertSame(0, $DB->count_records('groups_members', ['groupid' => $scenario['group']->id]));
     }
 }

@@ -25,8 +25,12 @@
 namespace enrol_eduapi\local\v1p0;
 
 use enrol_eduapi\local\interfaces\collection_factory as collection_factory_interface;
+use enrol_eduapi\local\interfaces\entity_factory as entity_factory_interface;
 use enrol_eduapi\local\v1p0\entities\academic_session;
+use enrol_eduapi\local\v1p0\entities\component_offering;
 use enrol_eduapi\local\v1p0\entities\course_offering;
+use enrol_eduapi\local\v1p0\entities\enrollment;
+use enrol_eduapi\tests\fixtures\entity_fixtures_trait;
 use enrol_eduapi\tests\fixtures\fake_paginated_collection;
 use IteratorAggregate;
 use progress_trace;
@@ -50,6 +54,8 @@ use RuntimeException;
  * @covers     \enrol_eduapi\local\v1p0\eduapi_client
  */
 final class eduapi_client_test extends \advanced_testcase {
+    use entity_fixtures_trait;
+
     /**
      * Build a fake_paginated_collection fixture.
      *
@@ -87,21 +93,6 @@ final class eduapi_client_test extends \advanced_testcase {
         $method->setAccessible(true);
 
         return $method->invoke($client, $collection, $itemhandler, $trace, $context);
-    }
-
-    /**
-     * A capturing progress_trace mock: output() appends to $messages.
-     *
-     * @param   array $messages Populated (by reference) as output() is called
-     * @return  progress_trace
-     */
-    protected function capturing_trace(array &$messages): progress_trace {
-        $trace = $this->createMock(progress_trace::class);
-        $trace->method('output')->willReturnCallback(function ($message) use (&$messages) {
-            $messages[] = $message;
-        });
-
-        return $trace;
     }
 
     /**
@@ -179,6 +170,231 @@ final class eduapi_client_test extends \advanced_testcase {
         $container->method('get_collection_factory')->willReturn($factory);
 
         return $container;
+    }
+
+    /**
+     * Build a ComponentOffering entity pre-seeded with data, so get()/get_id()/get_parent_ids() never
+     * trigger a network fetch.
+     *
+     * @param   string $sourcedid
+     * @param   string[] $parentids
+     * @return  component_offering
+     */
+    protected function make_component_offering(string $sourcedid, array $parentids): component_offering {
+        return new component_offering($this->createMock(container::class), $sourcedid, (object) [
+            'sourcedId' => $sourcedid,
+            'recordStatus' => 'active',
+            'parent' => $parentids,
+        ]);
+    }
+
+    /**
+     * Build a container whose collection factory records, in $callorder, the name of each collection
+     * fetch method called (in call order): $courseenrollmentitems for get_enrollments_for_course_offering(),
+     * $components for get_component_offerings(), and an empty collection for
+     * get_enrollments_for_component_offering().
+     *
+     * @param   array $callorder Populated (by reference) with the name of each method called
+     * @param   component_offering[] $components Items returned by get_component_offerings()
+     * @param   array $courseenrollmentitems Items returned by get_enrollments_for_course_offering()
+     * @return  container
+     */
+    protected function mock_container_recording_offering_calls(
+        array &$callorder,
+        array $components = [],
+        array $courseenrollmentitems = []
+    ): container {
+        require_once(__DIR__ . '/../../fixtures/fake_paginated_collection.php');
+        require_once(__DIR__ . '/../../fixtures/fake_paginated_iterator.php');
+
+        $factory = new class ($callorder, $components, $courseenrollmentitems) implements collection_factory_interface {
+            /** @var array Reference to the caller's call-order accumulator */
+            private $callorder;
+
+            /** @var component_offering[] Items to return from get_component_offerings() */
+            private $components;
+
+            /** @var array Items to return from get_enrollments_for_course_offering() */
+            private $courseenrollmentitems;
+
+            /**
+             * Constructor.
+             *
+             * @param   array $callorder Reference to the caller's call-order accumulator
+             * @param   component_offering[] $components Items to return from get_component_offerings()
+             * @param   array $courseenrollmentitems Items to return from get_enrollments_for_course_offering()
+             */
+            public function __construct(array &$callorder, array $components, array $courseenrollmentitems) {
+                $this->callorder = &$callorder;
+                $this->components = $components;
+                $this->courseenrollmentitems = $courseenrollmentitems;
+            }
+
+            /**
+             * Record the call and return the pre-built course-level enrolment items.
+             *
+             * @param   string $id
+             * @return  fake_paginated_collection
+             */
+            public function get_enrollments_for_course_offering(string $id): fake_paginated_collection {
+                $this->callorder[] = 'course-enrollments';
+
+                return new fake_paginated_collection($this->courseenrollmentitems);
+            }
+
+            /**
+             * Record the call and return the pre-built component offerings.
+             *
+             * @return  fake_paginated_collection
+             */
+            public function get_component_offerings(): fake_paginated_collection {
+                $this->callorder[] = 'components';
+
+                return new fake_paginated_collection($this->components);
+            }
+
+            /**
+             * Record the call and return an empty collection, as if the component offering had no
+             * enrolments.
+             *
+             * @param   string $id
+             * @return  fake_paginated_collection
+             */
+            public function get_enrollments_for_component_offering(string $id): fake_paginated_collection {
+                $this->callorder[] = 'component-enrollments';
+
+                return new fake_paginated_collection([]);
+            }
+        };
+
+        $container = $this->createMock(container::class);
+        $container->method('get_collection_factory')->willReturn($factory);
+
+        return $container;
+    }
+
+    /**
+     * sync_offering() (course level, sync_groups on) fetches and processes the course's own
+     * enrolments BEFORE it creates component groups and syncs their membership: groups_add_member()
+     * requires the user to already be enrolled in the course, so this ordering is a correctness
+     * requirement, not just cosmetic.
+     */
+    public function test_sync_offering_processes_course_enrollments_before_group_membership(): void {
+        $this->resetAfterTest();
+        set_config('sync_groups', 1, 'enrol_eduapi');
+
+        $callorder = [];
+        $container = $this->mock_container_recording_offering_calls(
+            $callorder,
+            [$this->make_component_offering('component-1', ['course-1'])]
+        );
+
+        $client = new eduapi_client($container);
+        $offering = new course_offering($container, 'course-1', (object) [
+            'sourcedId' => 'course-1',
+            'recordStatus' => 'active',
+        ]);
+        $touched = [];
+        $messages = [];
+
+        $this->invoke_protected(
+            $client,
+            'sync_offering',
+            [$offering, &$touched, $this->capturing_trace($messages), true]
+        );
+
+        $this->assertSame(['course-enrollments', 'components', 'component-enrollments'], $callorder);
+    }
+
+    /**
+     * With sync_groups off, sync_offering() still fetches the course's own enrolments, but never
+     * touches the component offerings collection nor any component's enrolments.
+     */
+    public function test_sync_offering_with_sync_groups_off_never_fetches_component_enrollments(): void {
+        $this->resetAfterTest();
+        set_config('sync_groups', 0, 'enrol_eduapi');
+
+        $callorder = [];
+        $container = $this->mock_container_recording_offering_calls($callorder);
+
+        $client = new eduapi_client($container);
+        $offering = new course_offering($container, 'course-2', (object) [
+            'sourcedId' => 'course-2',
+            'recordStatus' => 'active',
+        ]);
+        $touched = [];
+        $messages = [];
+
+        $this->invoke_protected(
+            $client,
+            'sync_offering',
+            [$offering, &$touched, $this->capturing_trace($messages), true]
+        );
+
+        $this->assertSame(['course-enrollments'], $callorder);
+    }
+
+    /**
+     * When the course's own enrolments fail to sync (at least one error), sync_offering() still
+     * creates/updates the component's group shell, but skips the group membership pass entirely for
+     * that offering (memberships are retried on the next run, once the course enrolments succeed), and
+     * traces why.
+     */
+    public function test_sync_offering_skips_group_membership_when_course_enrollments_fail(): void {
+        $this->resetAfterTest();
+        set_config('sync_groups', 1, 'enrol_eduapi');
+
+        $entityfactory = new class implements entity_factory_interface {
+            /**
+             * Simulate a fetch failure for any person lookup, so enrollment_converter::convert() fails
+             * for this enrollment - forcing sync_offering()'s enrolment pass to count one error.
+             *
+             * @param   string $id
+             * @return  void
+             */
+            public function fetch_person_by_id(string $id): void {
+                throw new RuntimeException('Simulated person fetch failure');
+            }
+        };
+        $entitycontainer = $this->createMock(container::class);
+        $entitycontainer->method('get_entity_factory')->willReturn($entityfactory);
+
+        $failingenrollment = new enrollment($entitycontainer, 'bad-enr-1', (object) [
+            'sourcedId' => 'bad-enr-1',
+            'person' => 'p-1',
+            'role' => 'student',
+            'enrollmentStatus' => 'enrolled',
+            'recordStatus' => 'active',
+            'educationOffering' => 'course-3',
+        ]);
+
+        $callorder = [];
+        $container = $this->mock_container_recording_offering_calls(
+            $callorder,
+            [$this->make_component_offering('component-1', ['course-3'])],
+            [$failingenrollment]
+        );
+
+        $client = new eduapi_client($container);
+        $offering = new course_offering($container, 'course-3', (object) [
+            'sourcedId' => 'course-3',
+            'recordStatus' => 'active',
+        ]);
+        $touched = [];
+        $messages = [];
+
+        $this->invoke_protected(
+            $client,
+            'sync_offering',
+            [$offering, &$touched, $this->capturing_trace($messages), true]
+        );
+
+        // The membership pass (and its enrolment fetch) never ran, but the group step itself did.
+        $this->assertSame(['course-enrollments', 'components'], $callorder);
+        $this->assertStringContainsString(
+            "Skipping group membership for offering 'course-3': 1 error(s)",
+            implode(' ', $messages)
+        );
     }
 
     /**

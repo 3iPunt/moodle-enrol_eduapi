@@ -26,6 +26,7 @@ namespace enrol_eduapi\local\converters;
 
 use enrol_eduapi\local\v1p0\entities\enrollment;
 use progress_trace;
+use stdClass;
 
 /**
  * Converts an Edu-API Enrollment entity into a Moodle enrolment + role assignment.
@@ -160,6 +161,24 @@ class enrollment_converter {
     }
 
     /**
+     * Resolve the role id and sync action for an Enrollment, the two pieces of resolution logic shared
+     * by convert() and convert_to_group_membership(): both need to know whether the enrolment's role
+     * is mapped at all, and what the enrollmentStatus/recordStatus pair resolves to.
+     *
+     * Pure logic (delegates to resolve_role_id() and resolve_action(), themselves free of DB writes),
+     * so this is fully testable without a live sync.
+     *
+     * @param   enrollment $enrollment
+     * @return  array{0: int|null, 1: string} [$roleid, $action]
+     */
+    private static function resolve_role_and_action(enrollment $enrollment): array {
+        $roleid = self::resolve_role_id($enrollment->get('role'));
+        $action = self::resolve_action($enrollment->get('enrollmentStatus'), $enrollment->get('recordStatus'));
+
+        return [$roleid, $action];
+    }
+
+    /**
      * Apply an Enrollment entity to Moodle: (un)enrol the matched user in the matched course's
      * `enrol_eduapi` instance, and assign the resolved role.
      *
@@ -191,13 +210,11 @@ class enrollment_converter {
             return;
         }
 
-        $roleid = self::resolve_role_id($enrollment->get('role'));
+        [$roleid, $action] = self::resolve_role_and_action($enrollment);
         if ($roleid === null) {
             // This RoleTypeEnum value is mapped to "Do not enrol": skip this enrolment entirely.
             return;
         }
-
-        $action = self::resolve_action($enrollment->get('enrollmentStatus'), $enrollment->get('recordStatus'));
 
         $plugin = enrol_get_plugin('eduapi');
         $existing = $DB->get_record('user_enrolments', ['userid' => $moodleuser->id, 'enrolid' => $instance->id]);
@@ -236,6 +253,90 @@ class enrollment_converter {
                     ])
                 ) {
                     role_assign($roleid, $moodleuser->id, $context->id, "enrol_{$instance->enrol}", $instance->id);
+                }
+                return;
+        }
+    }
+
+    /**
+     * Apply a ComponentOffering Enrollment entity to a Moodle group's membership: add the matched user
+     * when the enrolment is active/suspended, remove it when the enrolment resolves to unenrol.
+     *
+     * Only ever adds or removes the single member this $enrollment refers to: it never removes a
+     * member simply because that member does not appear among the component's current enrolments -
+     * removal is driven solely by an explicit unenrol action (enrollmentStatus mapping or
+     * recordStatus = deleted), the same rule convert() already applies to course enrolments.
+     *
+     * Deliberately never provisions a Moodle user: the Moodle user is resolved read-only via
+     * person_converter::get_mapped_userid(), never person_converter::convert(), so this method cannot
+     * create an orphan account for a Person who only ever appears in a component's enrolments. In
+     * practice this means the Person must also hold a CourseOffering-level enrolment - the pass that
+     * matches/creates the user and calls person_converter::save_mapping() - processed earlier in the
+     * same sync run; a component-only enrolment (no matching course-level enrolment for the same
+     * Person) is skipped.
+     *
+     * groups_add_member() itself enforces that the user is already enrolled in the group's course (a
+     * Moodle group API constraint) and is idempotent for an existing member, so neither is re-checked
+     * here; groups_remove_member() is likewise idempotent for a non-member.
+     *
+     * DB-mutating (reads/writes `groups_members` via the Moodle group API; reads `enrol` to find the
+     * course's enrol_eduapi instance id). Depends on the course-level enrolment pass having already run
+     * for this Person's sourcedId in the same sync run (see above) - not on offering_converter, since
+     * the group itself is passed in already resolved.
+     *
+     * @param   enrollment $enrollment
+     * @param   stdClass $group The Moodle group record for the component offering
+     * @param   progress_trace $trace Sync trace, for the various skip notes
+     * @return  void
+     */
+    public static function convert_to_group_membership(enrollment $enrollment, stdClass $group, progress_trace $trace): void {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . '/group/lib.php');
+
+        [$roleid, $action] = self::resolve_role_and_action($enrollment);
+
+        if ($action === self::ACTION_IGNORE) {
+            // Do not add; do not remove an existing membership.
+            return;
+        }
+
+        if ($roleid === null) {
+            // This RoleTypeEnum value is mapped to "Do not enrol": skip this enrolment's group
+            // membership entirely, whether it would otherwise have added or removed a member.
+            return;
+        }
+
+        $person = $enrollment->get_person();
+        $userid = person_converter::get_mapped_userid($person->get_id());
+        if ($userid === null) {
+            $trace->output(
+                "Group membership for enrollment '{$enrollment->get_id()}' skipped: " .
+                'person not mapped to a Moodle user.'
+            );
+            return;
+        }
+
+        switch ($action) {
+            case self::ACTION_UNENROL:
+                groups_remove_member($group, $userid);
+                return;
+
+            case self::ACTION_ENROL_ACTIVE:
+            case self::ACTION_ENROL_SUSPENDED:
+                $instanceid = $DB->get_field('enrol', 'id', ['courseid' => $group->courseid, 'enrol' => 'eduapi']);
+                if (!$instanceid) {
+                    $trace->output(
+                        "Group membership for enrollment '{$enrollment->get_id()}' skipped: " .
+                        "no enrol_eduapi instance for course id {$group->courseid}."
+                    );
+                    return;
+                }
+
+                if (!groups_add_member($group, $userid, 'enrol_eduapi', (int) $instanceid)) {
+                    $trace->output(
+                        "Group membership for enrollment '{$enrollment->get_id()}' skipped: " .
+                        'not enrolled in the course (or deleted).'
+                    );
                 }
                 return;
         }

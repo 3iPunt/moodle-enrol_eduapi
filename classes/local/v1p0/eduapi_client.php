@@ -27,10 +27,12 @@ namespace enrol_eduapi\local\v1p0;
 use enrol_eduapi\local\converters\enrollment_converter;
 use enrol_eduapi\local\converters\offering_converter;
 use enrol_eduapi\local\converters\organization_converter;
+use enrol_eduapi\local\v1p0\entities\component_offering;
 use enrol_eduapi\local\v1p0\entities\course_offering;
 use enrol_eduapi\local\v1p0\entities\education_offering;
 use null_progress_trace;
 use progress_trace;
+use stdClass;
 use Throwable;
 
 /**
@@ -414,15 +416,11 @@ class eduapi_client {
 
         $touchedcourseidnumbers[] = $course->idnumber;
 
-        if ($iscourselevel && $offering instanceof course_offering && get_config('enrol_eduapi', 'sync_groups')) {
-            $errors += $this->sync_groups_for_course_offering($offering, $course, $trace);
-        }
-
         $enrollments = $iscourselevel
             ? $this->container->get_collection_factory()->get_enrollments_for_course_offering($offering->get_id())
             : $this->container->get_collection_factory()->get_enrollments_for_component_offering($offering->get_id());
 
-        $errors += $this->iterate_safely(
+        $enrollmenterrors = $this->iterate_safely(
             $enrollments,
             function ($enrollment) use ($trace) {
                 try {
@@ -436,40 +434,95 @@ class eduapi_client {
             $trace,
             "enrollments for offering '{$offering->get_id()}'"
         );
+        $errors += $enrollmenterrors;
+
+        // Group shell creation AND membership must run after the course's own enrolments have been
+        // processed: groups_add_member() requires the user to already be enrolled in the course.
+        if ($iscourselevel && $offering instanceof course_offering && get_config('enrol_eduapi', 'sync_groups')) {
+            $skipmembership = $enrollmenterrors > 0;
+            if ($skipmembership) {
+                $trace->output(
+                    "Skipping group membership for offering '{$offering->get_id()}': {$enrollmenterrors} error(s) " .
+                    'while syncing its enrollments; memberships will be retried next run.'
+                );
+            }
+
+            $errors += $this->sync_groups_for_course_offering($offering, $course, $trace, $skipmembership);
+        }
 
         return $errors;
     }
 
     /**
-     * Create/update a Moodle group for every ComponentOffering that lists $courseoffering as a parent.
+     * Create/update a Moodle group for every ComponentOffering that lists $courseoffering as a parent,
+     * and (unless $skipmembership is set) sync that group's membership from the component's own
+     * enrolments.
      *
      * @param   course_offering $courseoffering
-     * @param   \stdClass $course The Moodle course $courseoffering was mapped to
+     * @param   stdClass $course The Moodle course $courseoffering was mapped to
      * @param   progress_trace $trace
+     * @param   bool $skipmembership Skip the membership pass for every component (group shells are
+     *                               still created/updated) - set when the course's own enrolments
+     *                               failed to sync this run, so membership is left for the next run
      * @return  int The number of errors encountered
      */
     protected function sync_groups_for_course_offering(
         course_offering $courseoffering,
-        \stdClass $course,
-        progress_trace $trace
+        stdClass $course,
+        progress_trace $trace,
+        bool $skipmembership
     ): int {
         return $this->iterate_safely(
             $this->container->get_collection_factory()->get_component_offerings(),
-            function ($component) use ($courseoffering, $course, $trace) {
+            function ($component) use ($courseoffering, $course, $trace, $skipmembership) {
                 if (!in_array($courseoffering->get_id(), $component->get_parent_ids(), true)) {
                     return 0;
                 }
 
                 try {
-                    offering_converter::convert_to_group($component, $course);
-                    return 0;
+                    $group = offering_converter::convert_to_group($component, $course);
                 } catch (Throwable $e) {
                     $trace->output("Group for component offering '{$component->get_id()}' failed: " . $e->getMessage());
                     return 1;
                 }
+
+                if ($skipmembership) {
+                    return 0;
+                }
+
+                return $this->sync_group_membership_for_component($component, $group, $trace);
             },
             $trace,
             'component offerings (group sync)'
+        );
+    }
+
+    /**
+     * Sync one component offering's group membership from its own enrolments.
+     *
+     * @param   component_offering $component
+     * @param   stdClass $group The Moodle group record for $component
+     * @param   progress_trace $trace
+     * @return  int The number of errors encountered
+     */
+    protected function sync_group_membership_for_component(
+        component_offering $component,
+        stdClass $group,
+        progress_trace $trace
+    ): int {
+        return $this->iterate_safely(
+            $this->container->get_collection_factory()->get_enrollments_for_component_offering($component->get_id()),
+            function ($enrollment) use ($group, $trace) {
+                try {
+                    enrollment_converter::convert_to_group_membership($enrollment, $group, $trace);
+                    return 0;
+                } catch (Throwable $e) {
+                    $trace->output("Group membership for enrollment '{$enrollment->get_id()}' failed: " . $e->getMessage());
+                    return 1;
+                }
+            },
+            $trace,
+            "enrollments for component offering '{$component->get_id()}' (group membership)"
         );
     }
 

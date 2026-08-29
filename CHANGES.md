@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Component offering group membership is now kept in sync: when
+  `offering_level = courseoffering` and `sync_groups` is on, users enrolled
+  in a ComponentOffering are added to its Moodle group after the course's
+  own enrolments are processed, and withdrawn/cancelled/deleted enrolments
+  are removed from the group. Only applies to a user who also holds a
+  CourseOffering-level enrolment; a component-only enrolment is skipped.
 - Fixed the data sync silently matching zero offerings when
   `datasync_academic_session` is configured with a `schoolYear` (or any
   parent) session while offerings are tagged with a child `semester`

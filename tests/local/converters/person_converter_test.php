@@ -24,8 +24,7 @@
 
 namespace enrol_eduapi\local\converters;
 
-use enrol_eduapi\local\interfaces\container as container_interface;
-use enrol_eduapi\local\v1p0\entities\person;
+use enrol_eduapi\tests\fixtures\entity_fixtures_trait;
 use progress_trace;
 use stdClass;
 
@@ -39,25 +38,7 @@ use stdClass;
  * @covers     \enrol_eduapi\local\converters\person_converter
  */
 final class person_converter_test extends \advanced_testcase {
-    /**
-     * Build a Person entity pre-seeded with data, so get()/get_id() never trigger a network fetch.
-     *
-     * @param   string $sourcedid
-     * @param   array $data Raw fields, merged over sensible defaults
-     * @return  person
-     */
-    protected function make_person(string $sourcedid, array $data = []): person {
-        $container = $this->createMock(container_interface::class);
-        $defaults = [
-            'sourcedId' => $sourcedid,
-            'recordStatus' => 'active',
-            'legalName' => (object) ['givenName' => 'Test', 'familyName' => 'Person'],
-            'primaryEmail' => null,
-            'otherIdentifiers' => [],
-        ];
-
-        return new person($container, $sourcedid, (object) array_merge($defaults, $data));
-    }
+    use entity_fixtures_trait;
 
     /**
      * normalise_for_field() lowercases usernames only; email/idnumber are compared as stored.

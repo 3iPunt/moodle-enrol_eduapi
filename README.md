@@ -60,7 +60,7 @@ Full configuration lives under **Site administration › Plugins › Enrolments
 | Block | What it configures |
 |---|---|
 | **Connection** | The provider's `token_url`, `root_url`, `clientid` and `secret` (OAuth2 Client Credentials), with a test-connection page. `root_url` must be the `servers` URL declared in the provider's OpenAPI discovery document (for example `https://example.org/ims/eduapi/base/v1p0`), not the hostname of the discovery document itself. |
-| **Education offering** | Which offering level becomes a course (`CourseOffering` or `ComponentOffering`; the level not chosen becomes groups) and the shortname attribute. |
+| **Education offering** | Which offering level becomes a course (`CourseOffering` or `ComponentOffering`; the level not chosen becomes groups) and the shortname attribute. Group membership is kept in sync from the `ComponentOffering`'s own enrolments, but only for a Person who also holds a `CourseOffering`-level enrolment; a component-only enrolment is skipped. |
 | **User matching** | Moodle field vs Edu-API attribute, with persistent mapping and an option to create unmatched users. |
 | **Role mapping** | A Moodle role (or "Do not enrol") for each `RoleTypeEnum` value. |
 | **Enrollment statuses** | An action for each of the 17 `EnrollmentStatusEnum` values (active / suspended / unenrol / ignore). |
