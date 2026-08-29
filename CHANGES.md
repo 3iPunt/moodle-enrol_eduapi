@@ -1,5 +1,22 @@
 # Changes
 
+## 1.0.0 (2026-08-29)
+
+First stable release. The plugin is certified by 1EdTech as an Edu-API v1.0
+conformant consumer:
+https://site.imsglobal.org/certifications/3punt/moodle-eduapi
+
+- Plugin maturity raised to stable.
+- Supported Moodle range declared and CI-verified as 4.5 to 5.2 (PHP 8.3).
+- Greek (el) language pack added; English, Spanish and Catalan updated.
+- Clarified the `root_url` setting help: use the `servers` URL from the
+  provider's OpenAPI discovery document, not the discovery hostname.
+- GPL-3.0 licence file added; README links the mock Edu-API provider used for
+  development and testing.
+
+No functional changes to the synchronisation since 0.1.0. No database
+changes; upgrading only bumps the version.
+
 ## 0.1.0 (2026-08-18)
 
 Initial release.

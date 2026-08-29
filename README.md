@@ -5,6 +5,11 @@ an external provider compatible with the 1EdTech Edu-API v1p0 specification.
 It does not modify Moodle core or the theme: it is an automatic enrolment
 plugin, with no manual enrolment interface.
 
+## Certification
+
+The plugin is certified by 1EdTech as an **Edu-API v1.0** conformant consumer.
+Product listing: <https://site.imsglobal.org/certifications/3punt/moodle-eduapi>
+
 ## What it does
 
 - Syncs the provider's organizations as Moodle course categories, preserving
@@ -48,7 +53,7 @@ Full configuration lives under **Site administration › Plugins › Enrolments
 
 | Block | What it configures |
 |---|---|
-| **Connection** | The provider's `token_url`, `root_url`, `clientid` and `secret` (OAuth2 Client Credentials), with a test-connection page. |
+| **Connection** | The provider's `token_url`, `root_url`, `clientid` and `secret` (OAuth2 Client Credentials), with a test-connection page. `root_url` must be the `servers` URL declared in the provider's OpenAPI discovery document (for example `https://example.org/ims/eduapi/base/v1p0`), not the hostname of the discovery document itself. |
 | **Education offering** | Which offering level becomes a course (`CourseOffering` or `ComponentOffering`; the level not chosen becomes groups) and the shortname attribute. |
 | **User matching** | Moodle field vs Edu-API attribute, with persistent mapping and an option to create unmatched users. |
 | **Role mapping** | A Moodle role (or "Do not enrol") for each `RoleTypeEnum` value. |
