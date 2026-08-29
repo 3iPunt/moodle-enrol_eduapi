@@ -192,6 +192,27 @@ if ($ADMIN->fulltree) {
         ]
     ));
 
+    $settings->add(new admin_setting_configtext(
+        'enrol_eduapi/user_field_department_source',
+        get_string('settings_user_field_department_source', 'enrol_eduapi'),
+        get_string('settings_user_field_source_desc', 'enrol_eduapi', get_string('department')),
+        ''
+    ));
+
+    $settings->add(new admin_setting_configtext(
+        'enrol_eduapi/user_field_institution_source',
+        get_string('settings_user_field_institution_source', 'enrol_eduapi'),
+        get_string('settings_user_field_source_desc', 'enrol_eduapi', get_string('institution')),
+        ''
+    ));
+
+    $settings->add(new admin_setting_configcheckbox(
+        'enrol_eduapi/user_field_update_existing',
+        get_string('settings_user_field_update_existing', 'enrol_eduapi'),
+        get_string('settings_user_field_update_existing_desc', 'enrol_eduapi'),
+        1
+    ));
+
     $settings->add(new admin_setting_configselect(
         'enrol_eduapi/shortname_attribute',
         get_string('settings_shortname_attribute', 'enrol_eduapi'),

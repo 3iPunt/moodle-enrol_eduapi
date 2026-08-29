@@ -24,6 +24,7 @@
 
 namespace enrol_eduapi\local\converters;
 
+use core_user;
 use enrol_eduapi\tests\fixtures\entity_fixtures_trait;
 use progress_trace;
 use stdClass;
@@ -204,5 +205,401 @@ final class person_converter_test extends \advanced_testcase {
 
         $this->assertNotNull($result);
         $this->assertEquals($user->id, $result->id);
+    }
+
+    /**
+     * resolve_profile_field_value() reads a top-level `extensions` key when it is present.
+     */
+    public function test_resolve_profile_field_value_extensions_key_present(): void {
+        $person = $this->make_person('src-1', [
+            'extensions' => (object) ['department' => 'Engineering'],
+        ]);
+
+        $this->assertSame(
+            'Engineering',
+            person_converter::resolve_profile_field_value($person, 'extensions.department')
+        );
+    }
+
+    /**
+     * resolve_profile_field_value() returns null when the `extensions` key is not present.
+     */
+    public function test_resolve_profile_field_value_extensions_key_missing(): void {
+        $person = $this->make_person('src-1', [
+            'extensions' => (object) ['department' => 'Engineering'],
+        ]);
+
+        $this->assertNull(person_converter::resolve_profile_field_value($person, 'extensions.institution'));
+    }
+
+    /**
+     * resolve_profile_field_value() returns null when the `extensions` key value is not a string or a
+     * number (e.g. a nested object or an array), rather than casting it to a string.
+     */
+    public function test_resolve_profile_field_value_extensions_non_scalar_value_ignored(): void {
+        $person = $this->make_person('src-1', [
+            'extensions' => (object) [
+                'department' => (object) ['name' => 'Engineering'],
+                'campuses' => ['north', 'south'],
+            ],
+        ]);
+
+        $this->assertNull(person_converter::resolve_profile_field_value($person, 'extensions.department'));
+        $this->assertNull(person_converter::resolve_profile_field_value($person, 'extensions.campuses'));
+    }
+
+    /**
+     * resolve_profile_field_value() casts an int `extensions` value to its decimal string.
+     */
+    public function test_resolve_profile_field_value_extensions_numeric_value_cast_to_string(): void {
+        $person = $this->make_person('src-1', [
+            'extensions' => (object) ['costcentre' => 42],
+        ]);
+
+        $this->assertSame('42', person_converter::resolve_profile_field_value($person, 'extensions.costcentre'));
+    }
+
+    /**
+     * resolve_profile_field_value() ignores a float `extensions` value: only strings and ints are cast,
+     * a float is not.
+     */
+    public function test_resolve_profile_field_value_extensions_float_value_ignored(): void {
+        $person = $this->make_person('src-1', [
+            'extensions' => (object) ['gpa' => 3.75],
+        ]);
+
+        $this->assertNull(person_converter::resolve_profile_field_value($person, 'extensions.gpa'));
+    }
+
+    /**
+     * resolve_profile_field_value() returns the identifier of the first `otherIdentifiers` entry whose
+     * `identifierType` matches.
+     */
+    public function test_resolve_profile_field_value_otheridentifiers_type_present(): void {
+        $person = $this->make_person('src-1', [
+            'otherIdentifiers' => [
+                (object) ['identifier' => 'ORG-001', 'identifierType' => 'systemId'],
+            ],
+        ]);
+
+        $this->assertSame(
+            'ORG-001',
+            person_converter::resolve_profile_field_value($person, 'otherIdentifiers.systemId')
+        );
+    }
+
+    /**
+     * resolve_profile_field_value() returns null when no `otherIdentifiers` entry matches the requested
+     * `identifierType`.
+     */
+    public function test_resolve_profile_field_value_otheridentifiers_type_missing(): void {
+        $person = $this->make_person('src-1', [
+            'otherIdentifiers' => [
+                (object) ['identifier' => 'ORG-001', 'identifierType' => 'systemId'],
+            ],
+        ]);
+
+        $this->assertNull(person_converter::resolve_profile_field_value($person, 'otherIdentifiers.sisSourcedId'));
+    }
+
+    /**
+     * resolve_profile_field_value() looks up an `otherIdentifiers.<type>` source directly against the
+     * person's `otherIdentifiers` entries, not through resolve_source_value() (which treats 'sourcedId'
+     * and 'primaryEmail' as special shortcuts rather than as otherIdentifiers types, and would otherwise
+     * leak the person's sourcedId/primaryEmail through a source string that does not describe them).
+     */
+    public function test_resolve_profile_field_value_otheridentifiers_does_not_leak_special_sources(): void {
+        $person = $this->make_person('src-1', [
+            'primaryEmail' => (object) ['email' => 'person@example.org'],
+            'otherIdentifiers' => [
+                (object) ['identifier' => 'ORG-001', 'identifierType' => 'systemId'],
+            ],
+        ]);
+
+        $this->assertNull(person_converter::resolve_profile_field_value($person, 'otherIdentifiers.sourcedId'));
+        $this->assertNull(person_converter::resolve_profile_field_value($person, 'otherIdentifiers.primaryEmail'));
+    }
+
+    /**
+     * resolve_profile_field_value() returns null for a malformed source string: one with no dot
+     * separator, or with a prefix that is neither `extensions` nor `otherIdentifiers`.
+     */
+    public function test_resolve_profile_field_value_malformed_source(): void {
+        $person = $this->make_person('src-1', [
+            'extensions' => (object) ['department' => 'Engineering'],
+        ]);
+
+        $this->assertNull(person_converter::resolve_profile_field_value($person, 'extensions'));
+        $this->assertNull(person_converter::resolve_profile_field_value($person, 'unknownprefix.department'));
+    }
+
+    /**
+     * resolve_profile_field_value() trims the resolved value and treats a whitespace-only value as
+     * absent (null), rather than as an empty string.
+     */
+    public function test_resolve_profile_field_value_trims_and_treats_blank_as_null(): void {
+        $person = $this->make_person('src-1', [
+            'extensions' => (object) ['department' => '  Engineering  ', 'empty' => '   '],
+        ]);
+
+        $this->assertSame(
+            'Engineering',
+            person_converter::resolve_profile_field_value($person, 'extensions.department')
+        );
+        $this->assertNull(person_converter::resolve_profile_field_value($person, 'extensions.empty'));
+    }
+
+    /**
+     * build_new_user_data() sets `department` and `institution` from the configured sources when
+     * creating a new user.
+     */
+    public function test_build_new_user_data_sets_department_and_institution_when_configured(): void {
+        $this->resetAfterTest();
+
+        set_config('user_field_department_source', 'extensions.department', 'enrol_eduapi');
+        set_config('user_field_institution_source', 'otherIdentifiers.systemId', 'enrol_eduapi');
+
+        $person = $this->make_person('src-1', [
+            'extensions' => (object) ['department' => 'Engineering'],
+            'otherIdentifiers' => [
+                (object) ['identifier' => 'Acme University', 'identifierType' => 'systemId'],
+            ],
+        ]);
+
+        $userdata = person_converter::build_new_user_data($person, 'email', 'src-1@example.org');
+
+        $this->assertSame('Engineering', $userdata->department);
+        $this->assertSame('Acme University', $userdata->institution);
+    }
+
+    /**
+     * build_new_user_data() leaves `department`/`institution` unset when no source is configured, even
+     * when the person carries matching extensions data.
+     */
+    public function test_build_new_user_data_leaves_fields_unset_when_no_source_configured(): void {
+        $this->resetAfterTest();
+
+        $person = $this->make_person('src-1', [
+            'extensions' => (object) ['department' => 'Engineering'],
+        ]);
+
+        $userdata = person_converter::build_new_user_data($person, 'email', 'src-1@example.org');
+
+        $this->assertObjectNotHasProperty('department', $userdata);
+        $this->assertObjectNotHasProperty('institution', $userdata);
+    }
+
+    /**
+     * convert() updates the `department` field on an already-mapped existing user when the configured
+     * source resolves to a value different from what is currently stored.
+     */
+    public function test_convert_updates_department_on_mapped_user_when_different(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $generator = $this->getDataGenerator();
+
+        $user = $generator->create_user(['department' => 'Old department']);
+        person_converter::save_mapping('mapped-1', $user->id);
+
+        set_config('user_field_department_source', 'extensions.department', 'enrol_eduapi');
+
+        $person = $this->make_person('mapped-1', [
+            'extensions' => (object) ['department' => 'New department'],
+        ]);
+
+        $messages = [];
+        $trace = $this->capturing_trace($messages);
+
+        $result = person_converter::convert($person, $trace);
+
+        $this->assertNotNull($result);
+        $this->assertSame('New department', $result->department);
+        $this->assertSame('New department', $DB->get_field('user', 'department', ['id' => $user->id]));
+        $this->assertStringContainsString("Person 'mapped-1': updated department to 'New department'", implode(' ', $messages));
+    }
+
+    /**
+     * convert() does not trigger a user update when the configured source resolves to the value already
+     * stored on the user (the stored record, including `timemodified`, is left untouched).
+     */
+    public function test_convert_does_not_update_when_value_already_matches(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $generator = $this->getDataGenerator();
+
+        $user = $generator->create_user(['department' => 'Engineering']);
+        person_converter::save_mapping('mapped-2', $user->id);
+
+        set_config('user_field_department_source', 'extensions.department', 'enrol_eduapi');
+
+        $person = $this->make_person('mapped-2', [
+            'extensions' => (object) ['department' => 'Engineering'],
+        ]);
+
+        $before = $DB->get_record('user', ['id' => $user->id]);
+
+        $result = person_converter::convert($person);
+
+        $after = $DB->get_record('user', ['id' => $user->id]);
+
+        $this->assertNotNull($result);
+        $this->assertEquals($before, $after);
+    }
+
+    /**
+     * convert() leaves the `department` field untouched (does not blank it) when the configured source
+     * resolves to null because the person has no value for that attribute.
+     */
+    public function test_convert_leaves_field_untouched_when_attribute_absent(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $generator = $this->getDataGenerator();
+
+        $user = $generator->create_user(['department' => 'Existing department']);
+        person_converter::save_mapping('mapped-3', $user->id);
+
+        set_config('user_field_department_source', 'extensions.department', 'enrol_eduapi');
+
+        // The person has extensions, but not the configured key.
+        $person = $this->make_person('mapped-3', [
+            'extensions' => (object) ['other' => 'value'],
+        ]);
+
+        $result = person_converter::convert($person);
+
+        $this->assertNotNull($result);
+        $this->assertSame('Existing department', $result->department);
+        $this->assertSame('Existing department', $DB->get_field('user', 'department', ['id' => $user->id]));
+    }
+
+    /**
+     * convert() leaves `department`/`institution` untouched when no source is configured, even when the
+     * person carries matching extensions data.
+     */
+    public function test_convert_leaves_fields_untouched_when_no_source_configured(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $generator = $this->getDataGenerator();
+
+        $user = $generator->create_user(['department' => 'Existing department']);
+        person_converter::save_mapping('mapped-4', $user->id);
+
+        $person = $this->make_person('mapped-4', [
+            'extensions' => (object) ['department' => 'Some other department'],
+        ]);
+
+        $before = $DB->get_record('user', ['id' => $user->id]);
+
+        $result = person_converter::convert($person);
+
+        $after = $DB->get_record('user', ['id' => $user->id]);
+
+        $this->assertNotNull($result);
+        $this->assertSame('Existing department', $result->department);
+        $this->assertEquals($before, $after);
+    }
+
+    /**
+     * convert() cleans the resolved profile field value (core_user::clean_field(), the same cleaning
+     * user_update_user() itself would apply) before both storing it and comparing it against what is
+     * already stored, so a value containing tags or other content PARAM_TEXT strips converges to the
+     * cleaned value instead of being re-written on every sync.
+     */
+    public function test_convert_cleans_department_value_before_comparing(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $generator = $this->getDataGenerator();
+
+        $user = $generator->create_user(['department' => '']);
+        person_converter::save_mapping('mapped-clean-1', $user->id);
+
+        set_config('user_field_department_source', 'extensions.department', 'enrol_eduapi');
+
+        $person = $this->make_person('mapped-clean-1', [
+            'extensions' => (object) ['department' => 'R&D <Robotics>'],
+        ]);
+
+        $expected = core_user::clean_field('R&D <Robotics>', 'department');
+
+        $messages = [];
+        $trace = $this->capturing_trace($messages);
+        $result = person_converter::convert($person, $trace);
+
+        $this->assertSame($expected, $result->department);
+        $this->assertSame($expected, $DB->get_field('user', 'department', ['id' => $user->id]));
+        $this->assertNotEmpty($messages);
+
+        // A second sync with the same source data must not re-write the field: the stored value is
+        // already clean, so it now compares equal to the freshly-cleaned resolved value.
+        $messages = [];
+        $trace = $this->capturing_trace($messages);
+        $result2 = person_converter::convert($person, $trace);
+
+        $this->assertSame($expected, $result2->department);
+        $this->assertEmpty($messages);
+    }
+
+    /**
+     * apply_profile_fields() leaves an existing user's configured fields untouched when
+     * `user_field_update_existing` is explicitly disabled, even though a source is configured and
+     * resolves to a value different from what is stored.
+     */
+    public function test_convert_does_not_update_existing_user_when_update_existing_disabled(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $generator = $this->getDataGenerator();
+
+        $user = $generator->create_user(['department' => 'Old department']);
+        person_converter::save_mapping('mapped-noupdate-1', $user->id);
+
+        set_config('user_field_department_source', 'extensions.department', 'enrol_eduapi');
+        set_config('user_field_update_existing', 0, 'enrol_eduapi');
+
+        $person = $this->make_person('mapped-noupdate-1', [
+            'extensions' => (object) ['department' => 'New department'],
+        ]);
+
+        $messages = [];
+        $trace = $this->capturing_trace($messages);
+
+        $result = person_converter::convert($person, $trace);
+
+        $this->assertNotNull($result);
+        $this->assertSame('Old department', $result->department);
+        $this->assertSame('Old department', $DB->get_field('user', 'department', ['id' => $user->id]));
+        $this->assertEmpty($messages);
+    }
+
+    /**
+     * apply_profile_fields() updates an existing user's configured field when `user_field_update_existing`
+     * is explicitly enabled: the same outcome as leaving it at its (enabled) default.
+     */
+    public function test_convert_updates_existing_user_when_update_existing_explicitly_enabled(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $generator = $this->getDataGenerator();
+
+        $user = $generator->create_user(['department' => 'Old department']);
+        person_converter::save_mapping('mapped-explicit-enable-1', $user->id);
+
+        set_config('user_field_department_source', 'extensions.department', 'enrol_eduapi');
+        set_config('user_field_update_existing', 1, 'enrol_eduapi');
+
+        $person = $this->make_person('mapped-explicit-enable-1', [
+            'extensions' => (object) ['department' => 'New department'],
+        ]);
+
+        $result = person_converter::convert($person);
+
+        $this->assertNotNull($result);
+        $this->assertSame('New department', $result->department);
+        $this->assertSame('New department', $DB->get_field('user', 'department', ['id' => $user->id]));
     }
 }

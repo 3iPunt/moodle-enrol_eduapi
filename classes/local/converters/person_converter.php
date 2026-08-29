@@ -24,6 +24,8 @@
 
 namespace enrol_eduapi\local\converters;
 
+use core_text;
+use core_user;
 use dml_exception;
 use enrol_eduapi\local\v1p0\entities\person;
 use null_progress_trace;
@@ -58,6 +60,12 @@ class person_converter {
     /** @var string Placeholder email domain used when a created user has no `primaryEmail` at all */
     const PLACEHOLDER_EMAIL_DOMAIN = 'eduapi.invalid';
 
+    /** @var int The DB column length of user.department and user.institution */
+    const PROFILE_FIELD_MAXLENGTH = 255;
+
+    /** @var string[] Moodle user profile fields configurable via a `user_field_<field>_source` setting */
+    const PROFILE_FIELDS = ['department', 'institution'];
+
     /**
      * Resolve the Edu-API source value to match against, per the `user_match_source` setting.
      *
@@ -82,6 +90,114 @@ class person_converter {
                 // Any other value is treated as an `otherIdentifiers` `identifierType`.
                 return $person->get_other_identifier($source);
         }
+    }
+
+    /**
+     * Resolve a `user_field_<field>_source` setting value against a Person entity.
+     *
+     * Grammar for $source: empty is not handled here (callers treat an empty setting as "disabled"
+     * before calling this method); `extensions.<key>` reads the given top-level key of the Person's
+     * `extensions` object (a string or an int is cast to a string; anything else - including a float -
+     * is ignored); `otherIdentifiers.<identifierType>` reads the `identifier` of the first
+     * `otherIdentifiers` entry whose `identifierType` matches, via the Person entity's own
+     * get_other_identifier() accessor (deliberately not resolve_source_value(), which special-cases
+     * 'sourcedId' and 'primaryEmail' as shortcuts rather than as otherIdentifiers types, and would leak
+     * those through a source string that does not actually describe an otherIdentifiers entry). Any
+     * other prefix, or a string with no `.` separator, is malformed and resolves to null. The resolved
+     * value is trimmed (a whitespace-only value is treated as absent) and truncated to
+     * PROFILE_FIELD_MAXLENGTH.
+     *
+     * This does not clean the value for storage in a Moodle user field (e.g. strip HTML tags); callers
+     * needing that must additionally run it through core_user::clean_field() - see
+     * resolve_configured_profile_fields(), which does so for both build_new_user_data() and
+     * apply_profile_fields().
+     *
+     * Pure data extraction: no database access, so this can be unit tested against fixture Person
+     * entities without a database.
+     *
+     * @param   person $person
+     * @param   string $source e.g. 'extensions.department' or 'otherIdentifiers.systemId'
+     * @return  string|null The resolved value, or null if the person has no value for that source
+     */
+    public static function resolve_profile_field_value(person $person, string $source): ?string {
+        $dotpos = strpos($source, '.');
+        if ($dotpos === false) {
+            return null;
+        }
+
+        $prefix = substr($source, 0, $dotpos);
+        $key = substr($source, $dotpos + 1);
+
+        if ($prefix === 'extensions') {
+            $extensions = $person->get('extensions');
+            if (!($extensions instanceof stdClass) || !property_exists($extensions, $key)) {
+                return null;
+            }
+
+            $value = $extensions->{$key};
+            if (!is_string($value) && !is_int($value)) {
+                return null;
+            }
+
+            $value = trim((string) $value);
+        } else if ($prefix === 'otherIdentifiers') {
+            $value = $person->get_other_identifier($key);
+            $value = $value !== null ? trim($value) : null;
+        } else {
+            return null;
+        }
+
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return core_text::substr($value, 0, self::PROFILE_FIELD_MAXLENGTH);
+    }
+
+    /**
+     * Resolve every configured `user_field_<field>_source` setting against a Person entity, cleaning
+     * each resolved value with core_user::clean_field() so it is safe to store in - and compare against
+     * - the corresponding Moodle user field.
+     *
+     * Cleaning here, before any comparison against a currently-stored value, is what makes an
+     * already-clean stored value compare equal on every subsequent sync (instead of being re-written
+     * forever): user_update_user() would clean the value anyway, so comparing the raw resolved value
+     * against an already-cleaned stored value would never converge for a value containing e.g. HTML
+     * tags or invalid UTF-8.
+     *
+     * A field is included in the result only when a source is configured for it, it resolves to a
+     * non-null value, and that value survives cleaning as a non-empty string. A field with no source
+     * configured, an absent attribute, or a value that cleans to '' is simply omitted - never blanked.
+     *
+     * Used by both build_new_user_data() (new users) and apply_profile_fields() (existing users), so the
+     * two code paths resolve and clean profile fields identically.
+     *
+     * @param   person $person
+     * @return  array Cleaned values keyed by Moodle field name (see PROFILE_FIELDS)
+     */
+    private static function resolve_configured_profile_fields(person $person): array {
+        $resolved = [];
+
+        foreach (self::PROFILE_FIELDS as $field) {
+            $source = get_config('enrol_eduapi', "user_field_{$field}_source");
+            if (empty($source)) {
+                continue;
+            }
+
+            $value = self::resolve_profile_field_value($person, $source);
+            if ($value === null) {
+                continue;
+            }
+
+            $value = core_user::clean_field($value, $field);
+            if ($value === '') {
+                continue;
+            }
+
+            $resolved[$field] = $value;
+        }
+
+        return $resolved;
     }
 
     /**
@@ -166,6 +282,21 @@ class person_converter {
     }
 
     /**
+     * Whether department/institution sources are also applied to already-existing users at every sync,
+     * per the `user_field_update_existing` setting. Defaults to true (enabled), unlike
+     * should_create_unmatched_users(): get_config() only ever returns the literal false used here when
+     * the setting has genuinely never been written (e.g. its admin default has not been applied yet), in
+     * which case the documented default (enabled) is kept rather than treated as disabled.
+     *
+     * @return  bool
+     */
+    public static function should_update_existing_users(): bool {
+        $value = get_config('enrol_eduapi', 'user_field_update_existing');
+
+        return $value === false ? true : (bool) $value;
+    }
+
+    /**
      * Derive a Moodle username for a newly-created user from a Person entity.
      *
      * If `user_match_moodlefield` is itself `username`, the value already matched against
@@ -207,7 +338,7 @@ class person_converter {
      * @return  string
      */
     public static function sanitise_username(string $candidate, string $sourcedid): string {
-        $candidate = \core_text::specialtoascii($candidate);
+        $candidate = core_text::specialtoascii($candidate);
         $candidate = preg_replace('/[^a-z0-9._-]/', '', strtolower($candidate));
 
         return $candidate !== '' ? $candidate : 'eduapi-' . substr(md5($sourcedid), 0, 8);
@@ -238,7 +369,8 @@ class person_converter {
     /**
      * Build the Moodle user fields for a new account provisioned from a Person entity.
      *
-     * Pure data transformation other than the username-uniqueness check (a read-only lookup).
+     * Pure data transformation other than the username-uniqueness check (a read-only lookup) and the
+     * `user_field_<field>_source` config reads.
      *
      * @param   person $person
      * @param   string $moodlefield The Moodle field being matched on (`user_match_moodlefield`)
@@ -271,6 +403,10 @@ class person_converter {
         // for, even if that overrides what was derived above (e.g. email, idnumber).
         $userdata->{$moodlefield} = self::normalise_for_field($moodlefield, $sourcevalue);
 
+        foreach (self::resolve_configured_profile_fields($person) as $field => $value) {
+            $userdata->{$field} = $value;
+        }
+
         return $userdata;
     }
 
@@ -296,6 +432,56 @@ class person_converter {
     }
 
     /**
+     * Apply the configured `user_field_<field>_source` settings to an existing Moodle user, per
+     * `user_field_update_existing` (see should_update_existing_users()).
+     *
+     * For each field resolved by resolve_configured_profile_fields() that differs from what is currently
+     * stored, includes it in a single user_update_user() call (so the standard user_updated event fires,
+     * as for any other Moodle profile update) and traces one line per changed field, then applies the
+     * same change to the in-memory $user rather than re-reading it from the database. An omitted field
+     * (no source configured, an absent attribute, or a value cleaning to '') leaves the stored field
+     * untouched rather than blanking it. When `user_field_update_existing` is disabled, or when no
+     * configured field actually differs from what is stored, this is a no-op: no update call is made and
+     * the given user record is returned unchanged.
+     *
+     * DB-mutating only when enabled and at least one configured field actually differs from what is
+     * stored.
+     *
+     * @param   stdClass $user The current Moodle user record
+     * @param   person $person
+     * @param   progress_trace $trace
+     * @return  stdClass $user, with any changed fields applied in-memory
+     */
+    private static function apply_profile_fields(stdClass $user, person $person, progress_trace $trace): stdClass {
+        global $CFG;
+
+        if (!self::should_update_existing_users()) {
+            return $user;
+        }
+
+        $updatedata = (object) ['id' => $user->id];
+        $haschanges = false;
+
+        foreach (self::resolve_configured_profile_fields($person) as $field => $value) {
+            if ($value === $user->{$field}) {
+                continue;
+            }
+
+            $updatedata->{$field} = $value;
+            $user->{$field} = $value;
+            $haschanges = true;
+            $trace->output("Person '{$person->get_id()}': updated {$field} to '{$value}'");
+        }
+
+        if ($haschanges) {
+            require_once($CFG->dirroot . '/user/lib.php');
+            user_update_user($updatedata, false, true);
+        }
+
+        return $user;
+    }
+
+    /**
      * Resolve a Person entity to a Moodle user record, persisting the mapping.
      *
      * If no matching Moodle user is found, either skips the person (returns null) or provisions a new
@@ -309,6 +495,12 @@ class person_converter {
      * than one Moodle user can share the matched field/value. In that case there is no reliable way to
      * pick "the" right account, so the person is skipped (same outcome as no match) and a warning
      * naming the matched field and value is emitted to `$trace`.
+     *
+     * An account found via the stored mapping or matched by field then goes through apply_profile_fields(),
+     * which keeps `department`/`institution` up to date per the `user_field_department_source` /
+     * `user_field_institution_source` settings (see that method). A newly-created account does not: its
+     * fields were already populated by build_new_user_data(), so running apply_profile_fields() on it
+     * would be a redundant no-op.
      *
      * @param   person $person
      * @param   progress_trace|null $trace Sync trace to report an ambiguous-match warning to; a
@@ -325,7 +517,8 @@ class person_converter {
 
         $existingid = self::get_mapped_userid($sourcedid);
         if ($existingid) {
-            return $DB->get_record('user', ['id' => $existingid, 'deleted' => 0]) ?: null;
+            $mappeduser = $DB->get_record('user', ['id' => $existingid, 'deleted' => 0]);
+            return $mappeduser ? self::apply_profile_fields($mappeduser, $person, $trace) : null;
         }
 
         $moodlefield = get_config('enrol_eduapi', 'user_match_moodlefield');
@@ -360,16 +553,18 @@ class person_converter {
         }
 
         $moodleuser = $matches ? reset($matches) : false;
+        $newlycreated = false;
 
         if (!$moodleuser) {
             if (!self::should_create_unmatched_users()) {
                 return null;
             }
             $moodleuser = self::create_user_from_person($person, $moodlefield, $sourcevalue);
+            $newlycreated = true;
         }
 
         self::save_mapping($sourcedid, (int) $moodleuser->id);
 
-        return $moodleuser;
+        return $newlycreated ? $moodleuser : self::apply_profile_fields($moodleuser, $person, $trace);
     }
 }

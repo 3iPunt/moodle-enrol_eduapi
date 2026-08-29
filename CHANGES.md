@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Added optional `user_field_department_source` and `user_field_institution_source`
+  settings to map a Person's `extensions.<key>` or `otherIdentifiers.<identifierType>`
+  attribute onto the Moodle user's `department`/`institution` fields. An absent or
+  empty attribute leaves the field untouched: it is never blanked by the sync. A new
+  `user_field_update_existing` setting (enabled by default) controls whether these
+  fields are also kept up to date on existing (mapped or matched) users at every sync,
+  triggering the standard `user_updated` event; when disabled, the sources only seed
+  the field on newly created users.
 - Component offering group membership is now kept in sync: when
   `offering_level = courseoffering` and `sync_groups` is on, users enrolled
   in a ComponentOffering are added to its Moodle group after the course's
