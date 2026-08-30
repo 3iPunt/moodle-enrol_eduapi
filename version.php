@@ -24,12 +24,12 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version   = 2026083000;        // The current plugin version (Date: YYYYMMDDXX).
+$plugin->version   = 2026083001;        // The current plugin version (Date: YYYYMMDDXX).
 $plugin->requires  = 2024100700;        // Requires Moodle 4.5 LTS or later (CI-verified range).
 $plugin->supported = [
     405,
     502,
 ];
 $plugin->component = 'enrol_eduapi';    // Full name of the plugin (used for diagnostics).
-$plugin->release = '1.1.0';
+$plugin->release = '1.2.0';
 $plugin->maturity = MATURITY_STABLE;
