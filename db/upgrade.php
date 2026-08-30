@@ -22,7 +22,7 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-use enrol_eduapi\local\converters\person_converter;
+use enrol_eduapi\local\upgrade_helper;
 
 /**
  * Perform the Edu-API upgrade steps.
@@ -39,22 +39,14 @@ function xmldb_enrol_eduapi_upgrade(int $oldversion): bool {
         // existing bare value is rewritten to the dotted form here rather than being silently
         // orphaned: without this step, Moodle's admin_setting_configselect would show the stored
         // value as unset and pre-select the default, and the next save of the settings page would
-        // overwrite it with that default.
+        // overwrite it with that default. The rewrite logic itself lives in upgrade_helper so it is
+        // autoloadable and unit testable without going through upgrade_plugin_savepoint().
         //
         // NOTE: the savepoint below (2026083000) is higher than $plugin->version at the time this
         // step was written (see version.php). Do not bump version.php here: the release that ships
         // this upgrade step must set $plugin->version to 2026083000 or later, otherwise Moodle will
         // never consider this step new enough to run.
-        $source = get_config('enrol_eduapi', 'user_match_source');
-
-        if (
-            !empty($source)
-                && $source !== 'primaryEmail'
-                && $source !== 'sourcedId'
-                && strpos($source, '.') === false
-        ) {
-            set_config('user_match_source', person_converter::build_other_identifier_source($source), 'enrol_eduapi');
-        }
+        upgrade_helper::migrate_user_match_source();
 
         upgrade_plugin_savepoint(true, 2026083000, 'enrol', 'eduapi');
     }
