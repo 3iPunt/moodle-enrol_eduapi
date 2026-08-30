@@ -51,6 +51,15 @@ final class person_converter_test extends \advanced_testcase {
     }
 
     /**
+     * normalise_for_field() trims the value, so a match source value already trimmed by
+     * resolve_source_value() converges with what is compared/stored here.
+     */
+    public function test_normalise_for_field_trims_whitespace(): void {
+        $this->assertSame('john.doe', person_converter::normalise_for_field('username', '  John.Doe  '));
+        $this->assertSame('person@example.org', person_converter::normalise_for_field('email', '  person@example.org  '));
+    }
+
+    /**
      * sanitise_username() transliterates a common accented character before stripping whatever is
      * still disallowed, instead of truncating the candidate at the first non-ASCII byte.
      */
@@ -208,74 +217,39 @@ final class person_converter_test extends \advanced_testcase {
     }
 
     /**
-     * resolve_profile_field_value() reads a top-level `extensions` key when it is present.
+     * resolve_source_value() returns the `primaryEmail` email when present.
      */
-    public function test_resolve_profile_field_value_extensions_key_present(): void {
+    public function test_resolve_source_value_primaryemail_present(): void {
         $person = $this->make_person('src-1', [
-            'extensions' => (object) ['department' => 'Engineering'],
+            'primaryEmail' => (object) ['email' => 'person@example.org'],
         ]);
 
-        $this->assertSame(
-            'Engineering',
-            person_converter::resolve_profile_field_value($person, 'extensions.department')
-        );
+        $this->assertSame('person@example.org', person_converter::resolve_source_value($person, 'primaryEmail'));
     }
 
     /**
-     * resolve_profile_field_value() returns null when the `extensions` key is not present.
+     * resolve_source_value() returns null for `primaryEmail` when the person has none.
      */
-    public function test_resolve_profile_field_value_extensions_key_missing(): void {
-        $person = $this->make_person('src-1', [
-            'extensions' => (object) ['department' => 'Engineering'],
-        ]);
+    public function test_resolve_source_value_primaryemail_absent(): void {
+        $person = $this->make_person('src-1');
 
-        $this->assertNull(person_converter::resolve_profile_field_value($person, 'extensions.institution'));
+        $this->assertNull(person_converter::resolve_source_value($person, 'primaryEmail'));
     }
 
     /**
-     * resolve_profile_field_value() returns null when the `extensions` key value is not a string or a
-     * number (e.g. a nested object or an array), rather than casting it to a string.
+     * resolve_source_value() returns the sourcedId for the `sourcedId` source.
      */
-    public function test_resolve_profile_field_value_extensions_non_scalar_value_ignored(): void {
-        $person = $this->make_person('src-1', [
-            'extensions' => (object) [
-                'department' => (object) ['name' => 'Engineering'],
-                'campuses' => ['north', 'south'],
-            ],
-        ]);
+    public function test_resolve_source_value_sourcedid(): void {
+        $person = $this->make_person('src-1');
 
-        $this->assertNull(person_converter::resolve_profile_field_value($person, 'extensions.department'));
-        $this->assertNull(person_converter::resolve_profile_field_value($person, 'extensions.campuses'));
+        $this->assertSame('src-1', person_converter::resolve_source_value($person, 'sourcedId'));
     }
 
     /**
-     * resolve_profile_field_value() casts an int `extensions` value to its decimal string.
+     * resolve_source_value() looks up a dotted `otherIdentifiers.<identifierType>` source directly
+     * against the person's `otherIdentifiers` entries.
      */
-    public function test_resolve_profile_field_value_extensions_numeric_value_cast_to_string(): void {
-        $person = $this->make_person('src-1', [
-            'extensions' => (object) ['costcentre' => 42],
-        ]);
-
-        $this->assertSame('42', person_converter::resolve_profile_field_value($person, 'extensions.costcentre'));
-    }
-
-    /**
-     * resolve_profile_field_value() ignores a float `extensions` value: only strings and ints are cast,
-     * a float is not.
-     */
-    public function test_resolve_profile_field_value_extensions_float_value_ignored(): void {
-        $person = $this->make_person('src-1', [
-            'extensions' => (object) ['gpa' => 3.75],
-        ]);
-
-        $this->assertNull(person_converter::resolve_profile_field_value($person, 'extensions.gpa'));
-    }
-
-    /**
-     * resolve_profile_field_value() returns the identifier of the first `otherIdentifiers` entry whose
-     * `identifierType` matches.
-     */
-    public function test_resolve_profile_field_value_otheridentifiers_type_present(): void {
+    public function test_resolve_source_value_otheridentifiers_dotted_present(): void {
         $person = $this->make_person('src-1', [
             'otherIdentifiers' => [
                 (object) ['identifier' => 'ORG-001', 'identifierType' => 'systemId'],
@@ -284,31 +258,16 @@ final class person_converter_test extends \advanced_testcase {
 
         $this->assertSame(
             'ORG-001',
-            person_converter::resolve_profile_field_value($person, 'otherIdentifiers.systemId')
+            person_converter::resolve_source_value($person, 'otherIdentifiers.systemId')
         );
     }
 
     /**
-     * resolve_profile_field_value() returns null when no `otherIdentifiers` entry matches the requested
-     * `identifierType`.
+     * resolve_source_value() returns null for a dotted `otherIdentifiers.<identifierType>` source when
+     * no `otherIdentifiers` entry of that type exists, without leaking the person's own sourcedId or
+     * primaryEmail through the `sourcedId`/`primaryEmail` identifierType names.
      */
-    public function test_resolve_profile_field_value_otheridentifiers_type_missing(): void {
-        $person = $this->make_person('src-1', [
-            'otherIdentifiers' => [
-                (object) ['identifier' => 'ORG-001', 'identifierType' => 'systemId'],
-            ],
-        ]);
-
-        $this->assertNull(person_converter::resolve_profile_field_value($person, 'otherIdentifiers.sisSourcedId'));
-    }
-
-    /**
-     * resolve_profile_field_value() looks up an `otherIdentifiers.<type>` source directly against the
-     * person's `otherIdentifiers` entries, not through resolve_source_value() (which treats 'sourcedId'
-     * and 'primaryEmail' as special shortcuts rather than as otherIdentifiers types, and would otherwise
-     * leak the person's sourcedId/primaryEmail through a source string that does not describe them).
-     */
-    public function test_resolve_profile_field_value_otheridentifiers_does_not_leak_special_sources(): void {
+    public function test_resolve_source_value_otheridentifiers_dotted_does_not_leak_special_sources(): void {
         $person = $this->make_person('src-1', [
             'primaryEmail' => (object) ['email' => 'person@example.org'],
             'otherIdentifiers' => [
@@ -316,37 +275,185 @@ final class person_converter_test extends \advanced_testcase {
             ],
         ]);
 
-        $this->assertNull(person_converter::resolve_profile_field_value($person, 'otherIdentifiers.sourcedId'));
-        $this->assertNull(person_converter::resolve_profile_field_value($person, 'otherIdentifiers.primaryEmail'));
+        $this->assertNull(person_converter::resolve_source_value($person, 'otherIdentifiers.sourcedId'));
+        $this->assertNull(person_converter::resolve_source_value($person, 'otherIdentifiers.primaryEmail'));
     }
 
     /**
-     * resolve_profile_field_value() returns null for a malformed source string: one with no dot
-     * separator, or with a prefix that is neither `extensions` nor `otherIdentifiers`.
+     * resolve_source_value() returns null for a dotted `otherIdentifiers.<identifierType>` source when
+     * no `otherIdentifiers` entry of that (unrelated, non-leaking) type exists.
      */
-    public function test_resolve_profile_field_value_malformed_source(): void {
+    public function test_resolve_source_value_otheridentifiers_dotted_missing(): void {
+        $person = $this->make_person('src-1', [
+            'otherIdentifiers' => [
+                (object) ['identifier' => 'ORG-001', 'identifierType' => 'systemId'],
+            ],
+        ]);
+
+        $this->assertNull(person_converter::resolve_source_value($person, 'otherIdentifiers.sisSourcedId'));
+    }
+
+    /**
+     * resolve_source_value() returns null for `otherIdentifiers.` (a dot with an empty key), the same
+     * way it does for `extensions.`: the empty-key guard applies to both prefixes.
+     */
+    public function test_resolve_source_value_otheridentifiers_empty_key(): void {
+        $person = $this->make_person('src-1', [
+            'otherIdentifiers' => [
+                (object) ['identifier' => 'ORG-001', 'identifierType' => 'systemId'],
+            ],
+        ]);
+
+        $this->assertNull(person_converter::resolve_source_value($person, 'otherIdentifiers.'));
+    }
+
+    /**
+     * resolve_source_value() has no fallback for a bare (dot-less) source that is neither
+     * `primaryEmail` nor `sourcedId`: it resolves to null even when the person happens to carry an
+     * `otherIdentifiers` entry whose `identifierType` equals that same bare string, proving there is
+     * no legacy fallback to an undotted `otherIdentifiers` lookup. A value stored before this grammar
+     * was tightened is migrated to the dotted `otherIdentifiers.<identifierType>` form by the
+     * `db/upgrade.php` step instead.
+     */
+    public function test_resolve_source_value_bare_dotless_source_has_no_fallback(): void {
+        $person = $this->make_person('src-1', [
+            'otherIdentifiers' => [
+                (object) ['identifier' => 'ORG-001', 'identifierType' => 'extensions'],
+            ],
+        ]);
+
+        $this->assertNull(person_converter::resolve_source_value($person, 'extensions'));
+    }
+
+    /**
+     * resolve_source_value() reads a top-level `extensions` key when it is a string.
+     */
+    public function test_resolve_source_value_extensions_string(): void {
         $person = $this->make_person('src-1', [
             'extensions' => (object) ['department' => 'Engineering'],
         ]);
 
-        $this->assertNull(person_converter::resolve_profile_field_value($person, 'extensions'));
-        $this->assertNull(person_converter::resolve_profile_field_value($person, 'unknownprefix.department'));
+        $this->assertSame('Engineering', person_converter::resolve_source_value($person, 'extensions.department'));
     }
 
     /**
-     * resolve_profile_field_value() trims the resolved value and treats a whitespace-only value as
-     * absent (null), rather than as an empty string.
+     * resolve_source_value() casts an int `extensions` value to its decimal string.
      */
-    public function test_resolve_profile_field_value_trims_and_treats_blank_as_null(): void {
+    public function test_resolve_source_value_extensions_int_cast_to_string(): void {
+        $person = $this->make_person('src-1', [
+            'extensions' => (object) ['costcentre' => 42],
+        ]);
+
+        $this->assertSame('42', person_converter::resolve_source_value($person, 'extensions.costcentre'));
+    }
+
+    /**
+     * resolve_source_value() ignores a float `extensions` value: only strings and ints are cast.
+     */
+    public function test_resolve_source_value_extensions_float_ignored(): void {
+        $person = $this->make_person('src-1', [
+            'extensions' => (object) ['gpa' => 3.75],
+        ]);
+
+        $this->assertNull(person_converter::resolve_source_value($person, 'extensions.gpa'));
+    }
+
+    /**
+     * resolve_source_value() ignores a nested object `extensions` value, rather than casting it to a
+     * string.
+     */
+    public function test_resolve_source_value_extensions_object_ignored(): void {
+        $person = $this->make_person('src-1', [
+            'extensions' => (object) ['department' => (object) ['name' => 'Engineering']],
+        ]);
+
+        $this->assertNull(person_converter::resolve_source_value($person, 'extensions.department'));
+    }
+
+    /**
+     * resolve_source_value() ignores an array `extensions` value, rather than casting it to a string.
+     */
+    public function test_resolve_source_value_extensions_array_ignored(): void {
+        $person = $this->make_person('src-1', [
+            'extensions' => (object) ['campuses' => ['north', 'south']],
+        ]);
+
+        $this->assertNull(person_converter::resolve_source_value($person, 'extensions.campuses'));
+    }
+
+    /**
+     * resolve_source_value() returns null when the requested `extensions` key is not present.
+     */
+    public function test_resolve_source_value_extensions_key_missing(): void {
+        $person = $this->make_person('src-1', [
+            'extensions' => (object) ['department' => 'Engineering'],
+        ]);
+
+        $this->assertNull(person_converter::resolve_source_value($person, 'extensions.institution'));
+    }
+
+    /**
+     * resolve_source_value() returns null for `extensions.` (a dot with an empty key).
+     */
+    public function test_resolve_source_value_extensions_empty_key(): void {
+        $person = $this->make_person('src-1', [
+            'extensions' => (object) ['department' => 'Engineering'],
+        ]);
+
+        $this->assertNull(person_converter::resolve_source_value($person, 'extensions.'));
+    }
+
+    /**
+     * resolve_source_value() returns null for a dotted source with an unknown prefix.
+     */
+    public function test_resolve_source_value_unknown_dotted_prefix(): void {
+        $person = $this->make_person('src-1');
+
+        $this->assertNull(person_converter::resolve_source_value($person, 'foo.bar'));
+    }
+
+    /**
+     * resolve_source_value() trims the resolved value and treats a whitespace-only value as absent
+     * (null), rather than as an empty string.
+     */
+    public function test_resolve_source_value_trims_whitespace(): void {
         $person = $this->make_person('src-1', [
             'extensions' => (object) ['department' => '  Engineering  ', 'empty' => '   '],
         ]);
 
-        $this->assertSame(
-            'Engineering',
-            person_converter::resolve_profile_field_value($person, 'extensions.department')
-        );
-        $this->assertNull(person_converter::resolve_profile_field_value($person, 'extensions.empty'));
+        $this->assertSame('Engineering', person_converter::resolve_source_value($person, 'extensions.department'));
+        $this->assertNull(person_converter::resolve_source_value($person, 'extensions.empty'));
+    }
+
+    /**
+     * Every `otherIdentifiers.<identifierType>` source built by
+     * person_converter::build_other_identifier_source() - the same helper settings.php uses to build
+     * the `user_match_source` select's option values - resolves through resolve_source_value() for a
+     * person carrying an `otherIdentifiers` entry of that type. Keep this list in sync with the
+     * $identifiertypes array in settings.php.
+     */
+    public function test_resolve_source_value_resolves_every_settings_identifier_type(): void {
+        $identifiertypes = [
+            'systemId', 'productId', 'userName', 'accountId', 'emailAddress', 'nationalIdentityNumber',
+            'isbn', 'issn', 'lisSourcedId', 'oneRosterSourcedId', 'sisSourcedId', 'ltiContextId',
+            'ltiDeploymentId', 'ltiToolId', 'ltiPlatformId', 'ltiUserId', 'identifier',
+        ];
+
+        foreach ($identifiertypes as $identifiertype) {
+            $person = $this->make_person('src-1', [
+                'otherIdentifiers' => [
+                    (object) ['identifier' => "VALUE-{$identifiertype}", 'identifierType' => $identifiertype],
+                ],
+            ]);
+
+            $source = person_converter::build_other_identifier_source($identifiertype);
+
+            $this->assertSame(
+                "VALUE-{$identifiertype}",
+                person_converter::resolve_source_value($person, $source),
+                "Failed for identifierType '{$identifiertype}'"
+            );
+        }
     }
 
     /**
@@ -387,6 +494,43 @@ final class person_converter_test extends \advanced_testcase {
 
         $this->assertObjectNotHasProperty('department', $userdata);
         $this->assertObjectNotHasProperty('institution', $userdata);
+    }
+
+    /**
+     * build_new_user_data() trims a `primaryEmail` value carrying leading/trailing whitespace, so the
+     * stored `email` field converges with a `primaryEmail` value resolved (and trimmed) elsewhere.
+     */
+    public function test_build_new_user_data_trims_primaryemail_whitespace(): void {
+        $this->resetAfterTest();
+
+        $person = $this->make_person('src-1', [
+            'primaryEmail' => (object) ['email' => '  ada.lovelace@example.org  '],
+        ]);
+
+        $userdata = person_converter::build_new_user_data($person, 'idnumber', 'src-1');
+
+        $this->assertSame('ada.lovelace@example.org', $userdata->email);
+    }
+
+    /**
+     * build_new_user_data() truncates a configured field's resolved value to
+     * person_converter::PROFILE_FIELD_MAXLENGTH characters when it exceeds the Moodle
+     * user.department/user.institution column length.
+     */
+    public function test_build_new_user_data_truncates_long_extension_value(): void {
+        $this->resetAfterTest();
+
+        set_config('user_field_department_source', 'extensions.department', 'enrol_eduapi');
+
+        $longvalue = str_repeat('x', 300);
+        $person = $this->make_person('src-1', [
+            'extensions' => (object) ['department' => $longvalue],
+        ]);
+
+        $userdata = person_converter::build_new_user_data($person, 'email', 'src-1@example.org');
+
+        $this->assertSame(person_converter::PROFILE_FIELD_MAXLENGTH, strlen($userdata->department));
+        $this->assertSame(substr($longvalue, 0, person_converter::PROFILE_FIELD_MAXLENGTH), $userdata->department);
     }
 
     /**

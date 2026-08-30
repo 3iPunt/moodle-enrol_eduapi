@@ -22,17 +22,42 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+use enrol_eduapi\local\converters\person_converter;
+
 /**
  * Perform the Edu-API upgrade steps.
  *
- * No upgrade steps yet: the initial schema (enrol_eduapi_user_map) is
- * declared directly in db/install.xml because this is a brand new plugin,
- * not an incremental change to a plugin already in production. This
- * function is left ready to receive future upgrade steps.
- *
- * @param   float $oldversion
+ * @param   int $oldversion
  * @return  bool
  */
-function xmldb_enrol_eduapi_upgrade($oldversion) {
+function xmldb_enrol_eduapi_upgrade(int $oldversion): bool {
+    if ($oldversion < 2026083000) {
+        // The `user_match_source` admin setting used to store a bare (dot-less) otherIdentifiers
+        // identifierType directly (e.g. 'systemId'). Its select now emits a prefixed
+        // 'otherIdentifiers.<identifierType>' value instead (see settings.php and
+        // person_converter::resolve_source_value(), which no longer accepts the bare form), so an
+        // existing bare value is rewritten to the dotted form here rather than being silently
+        // orphaned: without this step, Moodle's admin_setting_configselect would show the stored
+        // value as unset and pre-select the default, and the next save of the settings page would
+        // overwrite it with that default.
+        //
+        // NOTE: the savepoint below (2026083000) is higher than $plugin->version at the time this
+        // step was written (see version.php). Do not bump version.php here: the release that ships
+        // this upgrade step must set $plugin->version to 2026083000 or later, otherwise Moodle will
+        // never consider this step new enough to run.
+        $source = get_config('enrol_eduapi', 'user_match_source');
+
+        if (
+            !empty($source)
+                && $source !== 'primaryEmail'
+                && $source !== 'sourcedId'
+                && strpos($source, '.') === false
+        ) {
+            set_config('user_match_source', person_converter::build_other_identifier_source($source), 'enrol_eduapi');
+        }
+
+        upgrade_plugin_savepoint(true, 2026083000, 'enrol', 'eduapi');
+    }
+
     return true;
 }

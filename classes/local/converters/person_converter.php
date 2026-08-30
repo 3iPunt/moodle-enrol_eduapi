@@ -66,98 +66,114 @@ class person_converter {
     /** @var string[] Moodle user profile fields configurable via a `user_field_<field>_source` setting */
     const PROFILE_FIELDS = ['department', 'institution'];
 
+    /** @var string The `resolve_source_value()` prefix for a top-level `extensions.<key>` source */
+    public const SOURCE_PREFIX_EXTENSIONS = 'extensions';
+
+    /** @var string The `resolve_source_value()` prefix for an `otherIdentifiers.<identifierType>` source */
+    public const SOURCE_PREFIX_OTHER_IDENTIFIERS = 'otherIdentifiers';
+
     /**
-     * Resolve the Edu-API source value to match against, per the `user_match_source` setting.
+     * Build an `otherIdentifiers.<identifierType>` source string for the given identifierType.
      *
-     * Pure data extraction: no database access, so this can be unit tested against fixture Person
-     * entities without a database.
+     * Shared by settings.php (building the `user_match_source` select's option values) and
+     * db/upgrade.php (migrating a stored bare identifierType value), so both agree with
+     * resolve_source_value() on the exact prefix and separator.
      *
-     * @param   person $person
-     * @param   string $source One of 'primaryEmail', 'sourcedId', or an IdentifierTypeEnum value
-     *                         (an `otherIdentifiers` entry's `identifierType`)
-     * @return  string|null The value to match, or null if the person has no value for that source
+     * @param   string $identifiertype
+     * @return  string
      */
-    public static function resolve_source_value(person $person, string $source): ?string {
-        switch ($source) {
-            case 'sourcedId':
-                return $person->get_id();
-
-            case 'primaryEmail':
-                $email = $person->get('primaryEmail');
-                return $email->email ?? null;
-
-            default:
-                // Any other value is treated as an `otherIdentifiers` `identifierType`.
-                return $person->get_other_identifier($source);
-        }
+    public static function build_other_identifier_source(string $identifiertype): string {
+        return self::SOURCE_PREFIX_OTHER_IDENTIFIERS . '.' . $identifiertype;
     }
 
     /**
-     * Resolve a `user_field_<field>_source` setting value against a Person entity.
+     * Resolve an Edu-API source string to a value on the given Person entity.
      *
-     * Grammar for $source: empty is not handled here (callers treat an empty setting as "disabled"
-     * before calling this method); `extensions.<key>` reads the given top-level key of the Person's
-     * `extensions` object (a string or an int is cast to a string; anything else - including a float -
-     * is ignored); `otherIdentifiers.<identifierType>` reads the `identifier` of the first
-     * `otherIdentifiers` entry whose `identifierType` matches, via the Person entity's own
-     * get_other_identifier() accessor (deliberately not resolve_source_value(), which special-cases
-     * 'sourcedId' and 'primaryEmail' as shortcuts rather than as otherIdentifiers types, and would leak
-     * those through a source string that does not actually describe an otherIdentifiers entry). Any
-     * other prefix, or a string with no `.` separator, is malformed and resolves to null. The resolved
-     * value is trimmed (a whitespace-only value is treated as absent) and truncated to
-     * PROFILE_FIELD_MAXLENGTH.
+     * This is the single grammar for "pick a Person attribute", shared by `user_match_source` and the
+     * `user_field_<field>_source` settings:
      *
-     * This does not clean the value for storage in a Moodle user field (e.g. strip HTML tags); callers
-     * needing that must additionally run it through core_user::clean_field() - see
-     * resolve_configured_profile_fields(), which does so for both build_new_user_data() and
-     * apply_profile_fields().
+     * - `primaryEmail`: the person's primary email address.
+     * - `sourcedId`: the person's sourcedId.
+     * - `extensions.<key>`: a top-level key of the person's `extensions` object. Only a string or an
+     *   int value is read (an int is cast to its decimal string); anything else, including a float, a
+     *   nested object or an array, is ignored.
+     * - `otherIdentifiers.<identifierType>`: the `identifier` of the first `otherIdentifiers` entry
+     *   whose `identifierType` matches, via the Person entity's get_other_identifier() accessor. This
+     *   never falls through to the `primaryEmail`/`sourcedId` shortcuts above, so e.g.
+     *   `otherIdentifiers.sourcedId` resolves to null unless the person actually has an
+     *   `otherIdentifiers` entry of type `sourcedId`.
+     * - Any other dot-less value, an unrecognised dotted prefix, an empty key (e.g. `extensions.` or
+     *   `otherIdentifiers.`), or an empty source string resolves to null. There is no fallback for a
+     *   bare `<identifierType>` any more: a value stored before this was tightened is migrated to the
+     *   dotted `otherIdentifiers.<identifierType>` form by the `db/upgrade.php` step.
+     *
+     * The resolved value is trimmed; a whitespace-only value is treated as absent (null).
      *
      * Pure data extraction: no database access, so this can be unit tested against fixture Person
      * entities without a database.
      *
      * @param   person $person
-     * @param   string $source e.g. 'extensions.department' or 'otherIdentifiers.systemId'
+     * @param   string $source e.g. 'primaryEmail', 'sourcedId', 'extensions.department' or
+     *                         'otherIdentifiers.systemId'
      * @return  string|null The resolved value, or null if the person has no value for that source
      */
-    public static function resolve_profile_field_value(person $person, string $source): ?string {
+    public static function resolve_source_value(person $person, string $source): ?string {
+        if ($source === '') {
+            return null;
+        }
+
         $dotpos = strpos($source, '.');
         if ($dotpos === false) {
-            return null;
-        }
-
-        $prefix = substr($source, 0, $dotpos);
-        $key = substr($source, $dotpos + 1);
-
-        if ($prefix === 'extensions') {
-            $extensions = $person->get('extensions');
-            if (!($extensions instanceof stdClass) || !property_exists($extensions, $key)) {
+            if ($source === 'sourcedId') {
+                $value = $person->get_id();
+            } else if ($source === 'primaryEmail') {
+                $email = $person->get('primaryEmail');
+                $value = $email->email ?? null;
+            } else {
+                // No fallback: a bare value other than the two shortcuts above does not describe an
+                // attribute (see this method's docblock).
                 return null;
             }
-
-            $value = $extensions->{$key};
-            if (!is_string($value) && !is_int($value)) {
-                return null;
-            }
-
-            $value = trim((string) $value);
-        } else if ($prefix === 'otherIdentifiers') {
-            $value = $person->get_other_identifier($key);
-            $value = $value !== null ? trim($value) : null;
         } else {
+            $prefix = substr($source, 0, $dotpos);
+            $key = substr($source, $dotpos + 1);
+
+            if ($key === '') {
+                return null;
+            }
+
+            if ($prefix === self::SOURCE_PREFIX_EXTENSIONS) {
+                $extensions = $person->get('extensions');
+                if (!($extensions instanceof stdClass) || !property_exists($extensions, $key)) {
+                    return null;
+                }
+
+                $rawvalue = $extensions->{$key};
+                if (!is_string($rawvalue) && !is_int($rawvalue)) {
+                    return null;
+                }
+
+                $value = (string) $rawvalue;
+            } else if ($prefix === self::SOURCE_PREFIX_OTHER_IDENTIFIERS) {
+                $value = $person->get_other_identifier($key);
+            } else {
+                return null;
+            }
+        }
+
+        if ($value === null) {
             return null;
         }
 
-        if ($value === null || $value === '') {
-            return null;
-        }
+        $value = trim($value);
 
-        return core_text::substr($value, 0, self::PROFILE_FIELD_MAXLENGTH);
+        return $value !== '' ? $value : null;
     }
 
     /**
-     * Resolve every configured `user_field_<field>_source` setting against a Person entity, cleaning
-     * each resolved value with core_user::clean_field() so it is safe to store in - and compare against
-     * - the corresponding Moodle user field.
+     * Resolve every configured `user_field_<field>_source` setting against a Person entity, truncating
+     * each resolved value to PROFILE_FIELD_MAXLENGTH and cleaning it with core_user::clean_field() so it
+     * is safe to store in - and compare against - the corresponding Moodle user field.
      *
      * Cleaning here, before any comparison against a currently-stored value, is what makes an
      * already-clean stored value compare equal on every subsequent sync (instead of being re-written
@@ -170,7 +186,7 @@ class person_converter {
      * configured, an absent attribute, or a value that cleans to '' is simply omitted - never blanked.
      *
      * Used by both build_new_user_data() (new users) and apply_profile_fields() (existing users), so the
-     * two code paths resolve and clean profile fields identically.
+     * two code paths resolve, truncate and clean profile fields identically.
      *
      * @param   person $person
      * @return  array Cleaned values keyed by Moodle field name (see PROFILE_FIELDS)
@@ -184,10 +200,12 @@ class person_converter {
                 continue;
             }
 
-            $value = self::resolve_profile_field_value($person, $source);
+            $value = self::resolve_source_value($person, $source);
             if ($value === null) {
                 continue;
             }
+
+            $value = core_text::substr($value, 0, self::PROFILE_FIELD_MAXLENGTH);
 
             $value = core_user::clean_field($value, $field);
             if ($value === '') {
@@ -203,14 +221,17 @@ class person_converter {
     /**
      * Normalise a value for comparison against the given Moodle field.
      *
-     * Moodle stores `username` in lowercase and treats it case-insensitively; `email` and `idnumber`
-     * are compared as stored.
+     * The value is always trimmed first, so it converges with a value already trimmed by
+     * resolve_source_value(). Moodle stores `username` in lowercase and treats it case-insensitively;
+     * `email` and `idnumber` are compared as stored (beyond the trim).
      *
      * @param   string $moodlefield
      * @param   string $value
      * @return  string
      */
     public static function normalise_for_field(string $moodlefield, string $value): string {
+        $value = trim($value);
+
         return $moodlefield === 'username' ? strtolower($value) : $value;
     }
 
@@ -385,7 +406,9 @@ class person_converter {
         $lastname = $legalname->familyName ?? null;
 
         $primaryemail = $person->get('primaryEmail');
-        $email = $primaryemail->email ?? ($person->get_id() . '@' . self::PLACEHOLDER_EMAIL_DOMAIN);
+        // Trimmed the same way resolve_source_value() trims a 'primaryEmail' source, so a blank-only
+        // email is treated as absent (falls back to the placeholder) instead of being stored as-is.
+        $email = trim($primaryemail->email ?? '') ?: ($person->get_id() . '@' . self::PLACEHOLDER_EMAIL_DOMAIN);
 
         $userdata = (object) [
             'auth' => 'manual',

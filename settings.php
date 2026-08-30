@@ -26,6 +26,7 @@ defined('MOODLE_INTERNAL') || die();
 
 use enrol_eduapi\local\converters\enrollment_converter;
 use enrol_eduapi\local\converters\offering_converter;
+use enrol_eduapi\local\converters\person_converter;
 
 if ($ADMIN->fulltree) {
     $settings->add(new admin_setting_heading(
@@ -161,12 +162,16 @@ if ($ADMIN->fulltree) {
         'isbn', 'issn', 'lisSourcedId', 'oneRosterSourcedId', 'sisSourcedId', 'ltiContextId',
         'ltiDeploymentId', 'ltiToolId', 'ltiPlatformId', 'ltiUserId', 'identifier',
     ];
+    // Values are emitted in the unified resolve_source_value() grammar (see person_converter.php):
+    // 'primaryEmail', 'sourcedId', or a prefixed 'otherIdentifiers.<identifierType>'. A value stored
+    // before this prefix was introduced (a bare identifierType, with no dot) is migrated to the
+    // prefixed form by the db/upgrade.php step, so it is never orphaned by this re-keyed select.
     $usermatchsourceoptions = [
         'primaryEmail' => get_string('settings_user_match_source_primaryemail', 'enrol_eduapi'),
         'sourcedId' => get_string('settings_user_match_source_sourcedid', 'enrol_eduapi'),
     ];
     foreach ($identifiertypes as $identifiertype) {
-        $usermatchsourceoptions[$identifiertype] = get_string(
+        $usermatchsourceoptions[person_converter::build_other_identifier_source($identifiertype)] = get_string(
             'settings_user_match_source_otheridentifier',
             'enrol_eduapi',
             $identifiertype

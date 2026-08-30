@@ -1,5 +1,18 @@
 # Changes
 
+## Unreleased
+
+- Unified the grammar for `user_match_source` and `user_field_<field>_source`: both now accept
+  `primaryEmail`, `sourcedId`, `extensions.<key>` and `otherIdentifiers.<identifierType>` through a
+  single `resolve_source_value()` resolver. A `user_match_source` value stored as a bare (dot-less)
+  `otherIdentifiers` type before this change is automatically rewritten to the prefixed
+  `otherIdentifiers.<identifierType>` form by a `db/upgrade.php` step (savepoint 2026083000; the
+  release that ships this change must bump `version.php` to 2026083000 or later), so no manual action
+  is needed after upgrading.
+- Match values are now trimmed (`normalise_for_field()`/`build_new_user_data()`), the same way
+  `resolve_source_value()` already trims a resolved value, so a source value carrying incidental
+  leading/trailing whitespace converges instead of comparing unequal.
+
 ## 1.1.0 (2026-08-29)
 
 Three synchronisation improvements ported from the enrol_oneroster ecosystem
