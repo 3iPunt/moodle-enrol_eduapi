@@ -24,6 +24,7 @@
 
 namespace enrol_eduapi\local\converters;
 
+use core_text;
 use enrol_eduapi\local\converter;
 use enrol_eduapi\local\v1p0\entities\component_offering;
 use enrol_eduapi\local\v1p0\entities\education_offering;
@@ -121,16 +122,35 @@ class offering_converter {
      *
      * Pure data transformation: no database access. `shortname` is derived from
      * `shortname_attribute` ('sourcedId' or 'primaryCode'; anything else falls back to sourcedId).
+     * `fullname` is derived from `title` via converter::pick_language_value(), preferring the site's
+     * default language (`$CFG->lang`, not the acting user's own current language, so the result is
+     * stable no matter who triggers the sync) and honouring the `multilang` setting, with the
+     * sourcedId as fallback when the resolved value is empty; the result is then truncated to 254
+     * characters with core_text::substr(), since multilang markup can otherwise exceed the
+     * `course.fullname`/`groups.name` column length and cause a DML error. When `sync_description` is
+     * on and `description` resolves to a non-empty string, `summary` (as `FORMAT_MOODLE`, which
+     * preserves the provider's line breaks while still running the multilang filter) is added from it;
+     * otherwise neither `summary` nor `summaryformat` is present at all, so an existing course summary
+     * is never blanked by convert()'s field-by-field update.
      *
      * @param   education_offering $offering A course_offering or component_offering entity
      * @return  stdClass Fields suitable for create_course()/update_course() (without `category`,
      *                   which convert() fills in after resolving the organization)
      */
     public static function get_course_data(education_offering $offering): stdClass {
-        $titles = $offering->get('title') ?? [];
-        $fullname = (!empty($titles) && isset($titles[0]->value)) ? $titles[0]->value : $offering->get_id();
+        global $CFG;
 
-        return (object) [
+        $multilang = (bool) get_config('enrol_eduapi', 'multilang');
+        $sitelang = $CFG->lang ?? 'en';
+
+        $titles = $offering->get('title') ?? [];
+        $fullname = converter::pick_language_value($titles, $multilang, $sitelang);
+        if ($fullname === '') {
+            $fullname = $offering->get_id();
+        }
+        $fullname = core_text::substr($fullname, 0, 254);
+
+        $coursedata = (object) [
             'idnumber' => $offering->get_id(),
             'fullname' => $fullname,
             'shortname' => self::extract_shortname($offering),
@@ -138,6 +158,17 @@ class offering_converter {
             'enddate' => converter::from_datetime_to_unix($offering->get('endDate')),
             'visible' => !in_array($offering->get('recordStatus'), ['inactive', 'deleted'], true),
         ];
+
+        if (get_config('enrol_eduapi', 'sync_description')) {
+            $descriptions = $offering->get('description') ?? [];
+            $summary = converter::pick_language_value($descriptions, $multilang, $sitelang);
+            if ($summary !== '') {
+                $coursedata->summary = $summary;
+                $coursedata->summaryformat = FORMAT_MOODLE;
+            }
+        }
+
+        return $coursedata;
     }
 
     /**
@@ -274,6 +305,11 @@ SQL;
      * Create or update a Moodle group from a ComponentOffering, inside the given course, when the
      * chosen `offering_level` is `courseoffering` and `sync_groups` is active.
      *
+     * The group name is derived the same way as get_course_data()'s `fullname`: preferring the site's
+     * default language (`$CFG->lang`) over multilang markup depending on the `multilang` setting, then
+     * truncated to 254 characters with core_text::substr() to stay within the `groups.name` column
+     * length and avoid a DML error.
+     *
      * DB-mutating (creates/updates `groups` rows). Not exercised during development phase 3
      * verification.
      *
@@ -290,8 +326,13 @@ SQL;
 
         require_once($CFG->dirroot . '/group/lib.php');
 
+        $multilang = (bool) get_config('enrol_eduapi', 'multilang');
         $titles = $component->get('title') ?? [];
-        $name = (!empty($titles) && isset($titles[0]->value)) ? $titles[0]->value : $component->get_id();
+        $name = converter::pick_language_value($titles, $multilang, $CFG->lang ?? 'en');
+        if ($name === '') {
+            $name = $component->get_id();
+        }
+        $name = core_text::substr($name, 0, 254);
 
         $existing = $DB->get_record('groups', ['courseid' => $course->id, 'idnumber' => $component->get_id()]);
 

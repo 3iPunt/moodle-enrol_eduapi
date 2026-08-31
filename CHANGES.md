@@ -1,5 +1,22 @@
 # Changes
 
+## Unreleased
+
+- Added an optional `sync_description` setting (enabled by default) that maps an offering's
+  `description` onto the Moodle course `summary` (as `FORMAT_MOODLE`, which preserves the provider's
+  line breaks while still running the multilang filter) at every sync. When disabled, or when the
+  offering has no description, the course summary is left untouched, so an existing summary is never
+  blanked.
+- Added an optional `multilang` setting (disabled by default) that, when enabled, builds course
+  fullnames, group names and the course summary from every available language instead of a single
+  one, wrapping each Edu-API `recordLanguage` in a `<span lang="..." class="multilang">` tag.
+  Rendering the result as separate languages requires the site's "Multi-language content" filter
+  (`filter/multilang`) to be enabled. `recordLanguage` locale codes such as `en-US` are mapped to
+  Moodle language codes such as `en`. When disabled, the single value picked is deterministic: it
+  prefers the site's default language (`$CFG->lang`), not the language of whoever triggers the sync.
+  Course fullnames and group names are also truncated to 254 characters to stay within their column
+  length.
+
 ## 1.2.0 (2026-08-30)
 
 One grammar for every setting that picks a Person attribute, with an

@@ -229,6 +229,20 @@ if ($ADMIN->fulltree) {
         ]
     ));
 
+    $settings->add(new admin_setting_configcheckbox(
+        'enrol_eduapi/sync_description',
+        get_string('settings_sync_description', 'enrol_eduapi'),
+        get_string('settings_sync_description_desc', 'enrol_eduapi'),
+        1
+    ));
+
+    $settings->add(new admin_setting_configcheckbox(
+        'enrol_eduapi/multilang',
+        get_string('settings_multilang', 'enrol_eduapi'),
+        get_string('settings_multilang_desc', 'enrol_eduapi'),
+        0
+    ));
+
     // Role mapping: one admin_setting_configselect per RoleTypeEnum value, each offering every Moodle
     // course role plus an explicit "Do not enrol" (not mapped) option.
     $settings->add(new admin_setting_heading(
