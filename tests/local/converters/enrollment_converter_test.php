@@ -24,6 +24,7 @@
 
 namespace enrol_eduapi\local\converters;
 
+use enrol_eduapi\local\converter;
 use enrol_eduapi\local\interfaces\container as container_interface;
 use enrol_eduapi\local\interfaces\entity_factory as entity_factory_interface;
 use enrol_eduapi\local\v1p0\entities\enrollment;
@@ -67,6 +68,31 @@ final class enrollment_converter_test extends \advanced_testcase {
         return [
             'course' => $course,
             'group' => $group,
+            'user' => $user,
+            'instanceid' => $instanceid,
+        ];
+    }
+
+    /**
+     * Build a course, an enrol_eduapi instance for it, and a user - for convert() tests (course-level
+     * enrolment, as opposed to create_group_scenario()'s component/group membership tests).
+     *
+     * The course idnumber matches what offering_converter::get_enrol_instance_for_offering() looks up,
+     * so an Enrollment whose `educationOffering` is 'course-1' resolves to this instance.
+     *
+     * @return  array{course: \stdClass, user: \stdClass, instanceid: int}
+     */
+    protected function create_course_scenario(): array {
+        $generator = $this->getDataGenerator();
+
+        $course = $generator->create_course(['idnumber' => 'course-1']);
+        $user = $generator->create_user();
+
+        $plugin = enrol_get_plugin('eduapi');
+        $instanceid = $plugin->add_instance($course, ['status' => ENROL_INSTANCE_ENABLED]);
+
+        return [
+            'course' => $course,
             'user' => $user,
             'instanceid' => $instanceid,
         ];
@@ -466,5 +492,216 @@ final class enrollment_converter_test extends \advanced_testcase {
 
         $this->assertEquals($usercountbefore, $DB->count_records('user'));
         $this->assertSame(0, $DB->count_records('groups_members', ['groupid' => $scenario['group']->id]));
+    }
+
+    /**
+     * A new enrolment whose Enrollment record carries its own startDate/endDate is enrolled with those
+     * dates converted to unix timestamps, taking precedence over any roleEnablement fallback.
+     */
+    public function test_convert_new_enrolment_uses_enrollment_own_dates(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $scenario = $this->create_course_scenario();
+
+        person_converter::save_mapping('person-1', $scenario['user']->id);
+        $enrollment = $this->make_enrollment('enr-1', $this->make_person('person-1'), [
+            'educationOffering' => 'course-1',
+            'startDate' => '2020-08-31T00:00:00.000Z',
+            'endDate' => '2020-12-21T00:00:00.000Z',
+        ]);
+
+        enrollment_converter::convert($enrollment, null, [
+            'student' => ['startDate' => '2099-01-01T00:00:00.000Z', 'endDate' => '2099-06-01T00:00:00.000Z'],
+        ]);
+
+        $ue = $DB->get_record('user_enrolments', ['userid' => $scenario['user']->id, 'enrolid' => $scenario['instanceid']]);
+        $this->assertNotFalse($ue);
+        $this->assertSame(converter::from_datetime_to_unix('2020-08-31T00:00:00.000Z'), (int) $ue->timestart);
+        $this->assertSame(converter::from_datetime_to_unix('2020-12-21T00:00:00.000Z'), (int) $ue->timeend);
+    }
+
+    /**
+     * A new enrolment whose Enrollment record carries no dates falls back to the offering's
+     * roleEnablement entry matching the enrolment's own role.
+     */
+    public function test_convert_new_enrolment_falls_back_to_role_enablement_dates(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $scenario = $this->create_course_scenario();
+
+        person_converter::save_mapping('person-1', $scenario['user']->id);
+        $enrollment = $this->make_enrollment('enr-1', $this->make_person('person-1'), [
+            'educationOffering' => 'course-1',
+            'role' => 'teacher',
+        ]);
+
+        $roleenablement = [
+            'teacher' => ['startDate' => '2020-08-31T00:00:00.000Z', 'endDate' => '2020-12-21T00:00:00.000Z'],
+            'student' => ['startDate' => '2021-01-01T00:00:00.000Z', 'endDate' => '2021-06-01T00:00:00.000Z'],
+        ];
+        enrollment_converter::convert($enrollment, null, $roleenablement);
+
+        $ue = $DB->get_record('user_enrolments', ['userid' => $scenario['user']->id, 'enrolid' => $scenario['instanceid']]);
+        $this->assertNotFalse($ue);
+        $this->assertSame(converter::from_datetime_to_unix('2020-08-31T00:00:00.000Z'), (int) $ue->timestart);
+        $this->assertSame(converter::from_datetime_to_unix('2020-12-21T00:00:00.000Z'), (int) $ue->timeend);
+    }
+
+    /**
+     * A new enrolment with neither its own dates nor a matching roleEnablement entry is enrolled with
+     * timestart/timeend = 0 ("no limit").
+     */
+    public function test_convert_new_enrolment_uses_zero_when_no_dates_available(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $scenario = $this->create_course_scenario();
+
+        person_converter::save_mapping('person-1', $scenario['user']->id);
+        $enrollment = $this->make_enrollment('enr-1', $this->make_person('person-1'), [
+            'educationOffering' => 'course-1',
+        ]);
+
+        enrollment_converter::convert($enrollment, null, null);
+
+        $ue = $DB->get_record('user_enrolments', ['userid' => $scenario['user']->id, 'enrolid' => $scenario['instanceid']]);
+        $this->assertNotFalse($ue);
+        $this->assertSame(0, (int) $ue->timestart);
+        $this->assertSame(0, (int) $ue->timeend);
+    }
+
+    /**
+     * A roleEnablement entry present only for a DIFFERENT role than the enrolment's own role must never
+     * be applied: the enrolment falls through to 0, it does not borrow the other role's dates.
+     */
+    public function test_convert_new_enrolment_role_enablement_for_different_role_falls_back_to_zero(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $scenario = $this->create_course_scenario();
+
+        person_converter::save_mapping('person-1', $scenario['user']->id);
+        $enrollment = $this->make_enrollment('enr-1', $this->make_person('person-1'), [
+            'educationOffering' => 'course-1',
+            'role' => 'student',
+        ]);
+
+        $roleenablement = [
+            'teacher' => ['startDate' => '2020-08-31T00:00:00.000Z', 'endDate' => '2020-12-21T00:00:00.000Z'],
+        ];
+        enrollment_converter::convert($enrollment, null, $roleenablement);
+
+        $ue = $DB->get_record('user_enrolments', ['userid' => $scenario['user']->id, 'enrolid' => $scenario['instanceid']]);
+        $this->assertNotFalse($ue);
+        $this->assertSame(0, (int) $ue->timestart);
+        $this->assertSame(0, (int) $ue->timeend);
+    }
+
+    /**
+     * An enrolment whose own startDate/endDate are empty strings (not null) is treated the same as
+     * having no dates at all: the roleEnablement fallback still applies, an empty string must not
+     * suppress it.
+     */
+    public function test_convert_new_enrolment_treats_empty_string_date_as_absent(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $scenario = $this->create_course_scenario();
+
+        person_converter::save_mapping('person-1', $scenario['user']->id);
+        $enrollment = $this->make_enrollment('enr-1', $this->make_person('person-1'), [
+            'educationOffering' => 'course-1',
+            'startDate' => '',
+            'endDate' => '',
+        ]);
+
+        $roleenablement = [
+            'student' => ['startDate' => '2020-08-31T00:00:00.000Z', 'endDate' => '2020-12-21T00:00:00.000Z'],
+        ];
+        enrollment_converter::convert($enrollment, null, $roleenablement);
+
+        $ue = $DB->get_record('user_enrolments', ['userid' => $scenario['user']->id, 'enrolid' => $scenario['instanceid']]);
+        $this->assertNotFalse($ue);
+        $this->assertSame(converter::from_datetime_to_unix('2020-08-31T00:00:00.000Z'), (int) $ue->timestart);
+        $this->assertSame(converter::from_datetime_to_unix('2020-12-21T00:00:00.000Z'), (int) $ue->timeend);
+    }
+
+    /**
+     * An already-enrolled user whose stored dates differ from the resolved dates gets those dates
+     * updated via update_user_enrol().
+     */
+    public function test_convert_existing_enrolment_updates_dates_when_they_differ(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $scenario = $this->create_course_scenario();
+
+        $plugin = enrol_get_plugin('eduapi');
+        $roleid = enrollment_converter::resolve_role_id('student');
+        // Enrol the user directly with stale dates, bypassing convert() so this test controls the
+        // "before" state precisely.
+        $instance = $this->get_instance($scenario['instanceid']);
+        $plugin->enrol_user($instance, $scenario['user']->id, $roleid, 111, 222, ENROL_USER_ACTIVE);
+
+        person_converter::save_mapping('person-1', $scenario['user']->id);
+        $enrollment = $this->make_enrollment('enr-1', $this->make_person('person-1'), [
+            'educationOffering' => 'course-1',
+            'startDate' => '2020-08-31T00:00:00.000Z',
+            'endDate' => '2020-12-21T00:00:00.000Z',
+        ]);
+
+        enrollment_converter::convert($enrollment, null, null);
+
+        $ue = $DB->get_record('user_enrolments', ['userid' => $scenario['user']->id, 'enrolid' => $scenario['instanceid']]);
+        $this->assertNotFalse($ue);
+        $this->assertSame(converter::from_datetime_to_unix('2020-08-31T00:00:00.000Z'), (int) $ue->timestart);
+        $this->assertSame(converter::from_datetime_to_unix('2020-12-21T00:00:00.000Z'), (int) $ue->timeend);
+    }
+
+    /**
+     * An already-enrolled user whose stored status AND dates already match the resolved values is left
+     * untouched: no update is written (the whole row, including timemodified, stays identical).
+     */
+    public function test_convert_existing_enrolment_does_not_update_when_dates_and_status_match(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $scenario = $this->create_course_scenario();
+
+        $roleid = enrollment_converter::resolve_role_id('student');
+        $instance = $this->get_instance($scenario['instanceid']);
+        $startdate = converter::from_datetime_to_unix('2020-08-31T00:00:00.000Z');
+        $enddate = converter::from_datetime_to_unix('2020-12-21T00:00:00.000Z');
+        $plugin = enrol_get_plugin('eduapi');
+        $plugin->enrol_user($instance, $scenario['user']->id, $roleid, $startdate, $enddate, ENROL_USER_ACTIVE);
+
+        $before = $DB->get_record('user_enrolments', ['userid' => $scenario['user']->id, 'enrolid' => $scenario['instanceid']]);
+
+        person_converter::save_mapping('person-1', $scenario['user']->id);
+        $enrollment = $this->make_enrollment('enr-1', $this->make_person('person-1'), [
+            'educationOffering' => 'course-1',
+            'startDate' => '2020-08-31T00:00:00.000Z',
+            'endDate' => '2020-12-21T00:00:00.000Z',
+        ]);
+
+        enrollment_converter::convert($enrollment, null, null);
+
+        $after = $DB->get_record('user_enrolments', ['userid' => $scenario['user']->id, 'enrolid' => $scenario['instanceid']]);
+        $this->assertEquals($before, $after);
+    }
+
+    /**
+     * Fetch a live `enrol` instance record by id, as required by enrol_user()/update_user_enrol()'s
+     * `stdClass $instance` parameter.
+     *
+     * @param   int $instanceid
+     * @return  \stdClass
+     */
+    protected function get_instance(int $instanceid): \stdClass {
+        global $DB;
+
+        return $DB->get_record('enrol', ['id' => $instanceid], '*', MUST_EXIST);
     }
 }

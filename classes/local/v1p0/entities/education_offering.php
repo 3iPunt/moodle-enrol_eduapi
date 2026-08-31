@@ -84,4 +84,45 @@ abstract class education_offering extends entity {
     public function get_academic_session_id(): ?string {
         return $this->get('academicSession');
     }
+
+    /**
+     * Get this offering's `roleEnablement` entries, normalized into a `role => ['startDate' => ?string,
+     * 'endDate' => ?string]` map.
+     *
+     * Used by enrollment_converter::convert() as the fallback source for an Enrollment's `timestart`/
+     * `timeend` when the enrolment itself carries no `startDate`/`endDate`: the entry matching the
+     * enrolment's own `role` is looked up in the returned map.
+     *
+     * Tolerates an absent or empty `roleEnablement` field (returns []). An entry with no `role` is
+     * skipped, since it cannot be matched against an Enrollment's role. When two entries share the same
+     * `role`, the FIRST one wins: a later duplicate never overwrites an earlier entry's dates.
+     *
+     * @return  array `role => ['startDate' => ?string, 'endDate' => ?string]`
+     */
+    public function get_role_enablement(): array {
+        $raw = $this->get('roleEnablement');
+        if (empty($raw)) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($raw as $entry) {
+            $role = $entry->role ?? null;
+            if ($role === null) {
+                continue;
+            }
+
+            // First-wins: skip a role already resolved by an earlier entry.
+            if (array_key_exists($role, $result)) {
+                continue;
+            }
+
+            $result[$role] = [
+                'startDate' => $entry->startDate ?? null,
+                'endDate' => $entry->endDate ?? null,
+            ];
+        }
+
+        return $result;
+    }
 }

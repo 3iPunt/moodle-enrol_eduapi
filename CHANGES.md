@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Enrolments now carry a `timestart`/`timeend` instead of always being set to 0 ("no limit").
+  Precedence: the Enrollment record's own `startDate`/`endDate` first, else the parent offering's
+  `roleEnablement` entry matching the enrolment's own `role`, else 0. An existing enrolment whose
+  stored dates (or status) differ from the resolved values is updated; nothing is written when they
+  already match.
 - Added an optional `sync_description` setting (enabled by default) that maps an offering's
   `description` onto the Moodle course `summary` (as `FORMAT_MOODLE`, which preserves the provider's
   line breaks while still running the multilang filter) at every sync. When disabled, or when the

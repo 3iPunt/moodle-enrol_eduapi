@@ -74,4 +74,28 @@ class enrollment extends entity {
     public function get_person(): person {
         return $this->container->get_entity_factory()->fetch_person_by_id($this->get('person'));
     }
+
+    /**
+     * Get this enrolment's own `startDate`, if any.
+     *
+     * Takes precedence over the parent offering's `roleEnablement` when resolving the Moodle enrolment's
+     * `timestart`, see enrollment_converter::convert().
+     *
+     * @return  string|null
+     */
+    public function get_start_date(): ?string {
+        return $this->get('startDate');
+    }
+
+    /**
+     * Get this enrolment's own `endDate`, if any.
+     *
+     * Takes precedence over the parent offering's `roleEnablement` when resolving the Moodle enrolment's
+     * `timeend`, see enrollment_converter::convert().
+     *
+     * @return  string|null
+     */
+    public function get_end_date(): ?string {
+        return $this->get('endDate');
+    }
 }

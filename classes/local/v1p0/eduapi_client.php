@@ -420,11 +420,13 @@ class eduapi_client {
             ? $this->container->get_collection_factory()->get_enrollments_for_course_offering($offering->get_id())
             : $this->container->get_collection_factory()->get_enrollments_for_component_offering($offering->get_id());
 
+        $roleenablement = $offering->get_role_enablement();
+
         $enrollmenterrors = $this->iterate_safely(
             $enrollments,
-            function ($enrollment) use ($trace) {
+            function ($enrollment) use ($trace, $roleenablement) {
                 try {
-                    enrollment_converter::convert($enrollment, $trace);
+                    enrollment_converter::convert($enrollment, $trace, $roleenablement);
                     return 0;
                 } catch (Throwable $e) {
                     $trace->output("Enrollment '{$enrollment->get_id()}' failed: " . $e->getMessage());

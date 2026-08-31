@@ -24,6 +24,7 @@
 
 namespace enrol_eduapi\local\converters;
 
+use enrol_eduapi\local\converter;
 use enrol_eduapi\local\v1p0\entities\enrollment;
 use progress_trace;
 use stdClass;
@@ -179,6 +180,44 @@ class enrollment_converter {
     }
 
     /**
+     * Resolve the Moodle `timestart`/`timeend` unix timestamps for an Enrollment.
+     *
+     * Precedence, per this converter's class docblock: the Enrollment's own `startDate`/`endDate` first,
+     * else the parent offering's `roleEnablement` entry matching the enrolment's own `role` (via
+     * $roleenablement, built by the caller from education_offering::get_role_enablement()), else 0
+     * ("no limit"). The fallback is resolved as a date STRING before the single
+     * converter::from_datetime_to_unix() call, since 0 is itself a valid conversion result and would
+     * otherwise be indistinguishable from "absent".
+     *
+     * Pure logic (no database access), so this is fully testable without a live sync.
+     *
+     * @param   enrollment $enrollment
+     * @param   array|null $roleenablement `role => ['startDate' => ?string, 'endDate' => ?string]`, or
+     *                                     null when the caller has no offering-level fallback to offer
+     * @return  array{0: int, 1: int} [$timestart, $timeend]
+     */
+    private static function resolve_dates(enrollment $enrollment, ?array $roleenablement): array {
+        $roledates = $roleenablement[$enrollment->get('role')] ?? [];
+
+        // An empty string is treated the same as null (absent): it must not suppress the
+        // roleEnablement fallback the way a real date string does.
+        $startdate = $enrollment->get_start_date();
+        if ($startdate === null || $startdate === '') {
+            $startdate = $roledates['startDate'] ?? null;
+        }
+
+        $enddate = $enrollment->get_end_date();
+        if ($enddate === null || $enddate === '') {
+            $enddate = $roledates['endDate'] ?? null;
+        }
+
+        return [
+            converter::from_datetime_to_unix($startdate),
+            converter::from_datetime_to_unix($enddate),
+        ];
+    }
+
+    /**
      * Apply an Enrollment entity to Moodle: (un)enrol the matched user in the matched course's
      * `enrol_eduapi` instance, and assign the resolved role.
      *
@@ -191,9 +230,15 @@ class enrollment_converter {
      * @param   enrollment $enrollment
      * @param   progress_trace|null $trace Sync trace forwarded to person_converter::convert() so an
      *                                     ambiguous person match can be reported; optional
+     * @param   array|null $roleenablement The parent offering's roleEnablement, as returned by
+     *                                     education_offering::get_role_enablement() (`role =>
+     *                                     ['startDate' => ?string, 'endDate' => ?string]`), used as the
+     *                                     timestart/timeend fallback when the enrolment carries no dates
+     *                                     of its own; optional (null disables the fallback, so only the
+     *                                     enrolment's own dates and 0 apply)
      * @return  void
      */
-    public static function convert(enrollment $enrollment, ?progress_trace $trace = null): void {
+    public static function convert(enrollment $enrollment, ?progress_trace $trace = null, ?array $roleenablement = null): void {
         global $DB;
 
         $person = $enrollment->get_person();
@@ -233,13 +278,15 @@ class enrollment_converter {
             case self::ACTION_ENROL_ACTIVE:
             case self::ACTION_ENROL_SUSPENDED:
                 $status = $action === self::ACTION_ENROL_SUSPENDED ? ENROL_USER_SUSPENDED : ENROL_USER_ACTIVE;
+                [$timestart, $timeend] = self::resolve_dates($enrollment, $roleenablement);
 
                 if ($existing) {
-                    if ((int) $existing->status !== $status) {
-                        $plugin->update_user_enrol($instance, $moodleuser->id, $status);
+                    $datechanged = (int) $existing->timestart !== $timestart || (int) $existing->timeend !== $timeend;
+                    if ((int) $existing->status !== $status || $datechanged) {
+                        $plugin->update_user_enrol($instance, $moodleuser->id, $status, $timestart, $timeend);
                     }
                 } else {
-                    $plugin->enrol_user($instance, $moodleuser->id, $roleid, 0, 0, $status);
+                    $plugin->enrol_user($instance, $moodleuser->id, $roleid, $timestart, $timeend, $status);
                 }
 
                 $context = \context_course::instance($instance->courseid);
