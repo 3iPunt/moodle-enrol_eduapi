@@ -79,6 +79,26 @@ final class offering_converter_test extends \advanced_testcase {
     }
 
     /**
+     * education_offering::get_role_enablement() keeps the FIRST entry's dates when the raw
+     * `roleEnablement` array carries two entries for the same role: a later duplicate must never
+     * overwrite an earlier one.
+     */
+    public function test_get_role_enablement_first_entry_wins_on_duplicate_role(): void {
+        $offering = $this->make_course_offering('src-role-enablement-1', [
+            'roleEnablement' => [
+                (object) ['role' => 'teacher', 'startDate' => '2020-01-01T00:00:00.000Z', 'endDate' => '2020-06-01T00:00:00.000Z'],
+                (object) ['role' => 'teacher', 'startDate' => '2099-01-01T00:00:00.000Z', 'endDate' => '2099-06-01T00:00:00.000Z'],
+            ],
+        ]);
+
+        $result = $offering->get_role_enablement();
+
+        $this->assertSame([
+            'teacher' => ['startDate' => '2020-01-01T00:00:00.000Z', 'endDate' => '2020-06-01T00:00:00.000Z'],
+        ], $result);
+    }
+
+    /**
      * get_course_data() picks the title matching the site's default language ($CFG->lang) when
      * multilang is off, ignoring the acting user's own session language.
      */
@@ -140,6 +160,32 @@ final class offering_converter_test extends \advanced_testcase {
             . '<span lang="el" class="multilang">Greek Title</span>';
 
         $this->assertSame($expected, $data->fullname);
+    }
+
+    /**
+     * get_course_data() never stores a fullname with a multilang span cut in half: when the assembled
+     * multilang value would exceed the 254-char column length, it falls back to the single-language
+     * pick instead of blindly truncating the markup.
+     */
+    public function test_get_course_data_fullname_falls_back_to_single_language_when_multilang_exceeds_column_length(): void {
+        $this->resetAfterTest();
+        set_config('multilang', 1, 'enrol_eduapi');
+        global $CFG;
+        $CFG->lang = 'en';
+
+        $longvalue = str_repeat('A', 200);
+        $offering = $this->make_course_offering('src-role-long-1', [
+            'title' => [
+                (object) ['recordLanguage' => 'en-US', 'value' => $longvalue],
+                (object) ['recordLanguage' => 'es', 'value' => str_repeat('B', 200)],
+            ],
+        ]);
+
+        $data = offering_converter::get_course_data($offering);
+
+        $this->assertLessThanOrEqual(254, core_text::strlen($data->fullname));
+        $this->assertStringNotContainsString('<span', $data->fullname);
+        $this->assertSame($longvalue, $data->fullname);
     }
 
     /**
@@ -267,6 +313,34 @@ final class offering_converter_test extends \advanced_testcase {
         $group = offering_converter::convert_to_group($component, $course);
 
         $this->assertLessThanOrEqual(254, core_text::strlen($group->name));
+    }
+
+    /**
+     * convert_to_group() never stores a group name with a multilang span cut in half: when the
+     * assembled multilang value would exceed the 254-char column length, it falls back to the
+     * single-language pick instead of blindly truncating the markup.
+     */
+    public function test_convert_to_group_name_falls_back_to_single_language_when_multilang_exceeds_column_length(): void {
+        $this->resetAfterTest();
+        set_config('sync_groups', 1, 'enrol_eduapi');
+        set_config('multilang', 1, 'enrol_eduapi');
+        global $CFG;
+        $CFG->lang = 'en';
+
+        $course = $this->getDataGenerator()->create_course();
+        $longvalue = str_repeat('A', 200);
+        $component = $this->make_component_offering('comp-role-long-1', [
+            'title' => [
+                (object) ['recordLanguage' => 'en-US', 'value' => $longvalue],
+                (object) ['recordLanguage' => 'es', 'value' => str_repeat('B', 200)],
+            ],
+        ]);
+
+        $group = offering_converter::convert_to_group($component, $course);
+
+        $this->assertLessThanOrEqual(254, core_text::strlen($group->name));
+        $this->assertStringNotContainsString('<span', $group->name);
+        $this->assertSame($longvalue, $group->name);
     }
 
     /**

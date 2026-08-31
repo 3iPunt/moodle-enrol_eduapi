@@ -117,16 +117,20 @@ class converter {
      * Pick or combine the display value from an array of language-tagged entries.
      *
      * `$entries` is the raw `title`/`description` field of an Edu-API entity: an array of stdClass
-     * objects shaped `{recordLanguage, value}` (LanguageTypedString[]). Entries with an empty `value`
-     * are skipped. When `$multilang` is true, every remaining entry is wrapped in its own
-     * `<span lang="..." class="multilang">` tag and concatenated (rendering requires the site's
+     * objects shaped `{recordLanguage, value}` (LanguageTypedString[]). An entry whose `value` is
+     * exactly an empty string is skipped; a value of `"0"` (falsy in PHP but a legitimate string) is
+     * kept. When `$multilang` is true, every remaining entry's value is escaped with `s()` (Edu-API
+     * LanguageTypedString values are plain text, never markup) and wrapped in its own
+     * `<span lang="..." class="multilang">` tag, then concatenated (rendering requires the site's
      * "Multi-language content" filter to be enabled); an entry whose recordLanguage cannot be mapped
      * to a Moodle language code is omitted rather than emitting an empty `lang=""` attribute, and if
-     * every entry ends up omitted this way, the first non-empty entry's raw value is returned instead
-     * of losing the title entirely. When `$multilang` is false, a single value is picked: the entry
-     * matching `$sitelang`, else the entry mapping to 'en', else the first non-empty entry. `$sitelang`
-     * defaults to the site's default language (`$CFG->lang`) rather than the acting user's own
-     * current/session language, so the resolved value is stable no matter who or what triggers a sync.
+     * every entry ends up omitted this way, the first non-empty entry's raw (unescaped) value is
+     * returned instead of losing the title entirely. When `$multilang` is false, a single value is
+     * picked: the entry matching `$sitelang`, else the entry mapping to 'en', else the first non-empty
+     * entry; this raw value is never escaped here, since the caller renders it through format_string()
+     * or FORMAT_MOODLE, which already escape as needed. `$sitelang` defaults to the site's default
+     * language (`$CFG->lang`) rather than the acting user's own current/session language, so the
+     * resolved value is stable no matter who or what triggers a sync.
      *
      * @param   array $entries stdClass[] shaped {recordLanguage, value}
      * @param   bool $multilang Whether to emit multilang markup for every language, or pick one value
@@ -134,8 +138,10 @@ class converter {
      * @return  string
      */
     public static function pick_language_value(array $entries, bool $multilang, ?string $sitelang = null): string {
+        // A value of exactly '0' is legitimate and must be kept: !empty('0') is false in PHP, so the
+        // filter compares against '' explicitly instead.
         $nonempty = array_values(array_filter($entries, function ($entry) {
-            return !empty($entry->value ?? '');
+            return ($entry->value ?? '') !== '';
         }));
 
         if (empty($nonempty)) {
@@ -149,7 +155,9 @@ class converter {
                 if ($lang === '') {
                     continue;
                 }
-                $result .= '<span lang="' . $lang . '" class="multilang">' . $entry->value . '</span>';
+                // Edu-API LanguageTypedString values are plain text, so escaping here is correct: the
+                // value is not itself markup and must not be interpreted as such inside the span.
+                $result .= '<span lang="' . $lang . '" class="multilang">' . s($entry->value) . '</span>';
             }
 
             return $result !== '' ? $result : $nonempty[0]->value;

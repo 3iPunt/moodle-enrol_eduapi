@@ -201,4 +201,37 @@ final class converter_test extends \advanced_testcase {
 
         $this->assertSame('French', converter::pick_language_value($entries, false, 'pt'));
     }
+
+    /**
+     * pick_language_value() with multilang on escapes special characters inside the value, so a
+     * provider-supplied '<' or '&' cannot break out of the multilang span markup.
+     */
+    public function test_pick_language_value_multilang_escapes_special_characters(): void {
+        $entries = [(object) ['recordLanguage' => 'en-US', 'value' => 'Bio & <script>alert(1)</script>']];
+
+        $this->assertSame(
+            '<span lang="en" class="multilang">Bio &amp; &lt;script&gt;alert(1)&lt;/script&gt;</span>',
+            converter::pick_language_value($entries, true)
+        );
+    }
+
+    /**
+     * pick_language_value() keeps a value of exactly '0' with multilang off: '0' is falsy in PHP but a
+     * legitimate LanguageTypedString value and must not be treated as empty.
+     */
+    public function test_pick_language_value_keeps_value_of_zero_multilang_off(): void {
+        $entries = [(object) ['recordLanguage' => 'en-US', 'value' => '0']];
+
+        $this->assertSame('0', converter::pick_language_value($entries, false));
+    }
+
+    /**
+     * pick_language_value() keeps a value of exactly '0' with multilang on, wrapping it in its span
+     * like any other non-empty value.
+     */
+    public function test_pick_language_value_keeps_value_of_zero_multilang_on(): void {
+        $entries = [(object) ['recordLanguage' => 'en-US', 'value' => '0']];
+
+        $this->assertSame('<span lang="en" class="multilang">0</span>', converter::pick_language_value($entries, true));
+    }
 }

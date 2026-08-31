@@ -122,16 +122,13 @@ class offering_converter {
      *
      * Pure data transformation: no database access. `shortname` is derived from
      * `shortname_attribute` ('sourcedId' or 'primaryCode'; anything else falls back to sourcedId).
-     * `fullname` is derived from `title` via converter::pick_language_value(), preferring the site's
-     * default language (`$CFG->lang`, not the acting user's own current language, so the result is
-     * stable no matter who triggers the sync) and honouring the `multilang` setting, with the
-     * sourcedId as fallback when the resolved value is empty; the result is then truncated to 254
-     * characters with core_text::substr(), since multilang markup can otherwise exceed the
-     * `course.fullname`/`groups.name` column length and cause a DML error. When `sync_description` is
-     * on and `description` resolves to a non-empty string, `summary` (as `FORMAT_MOODLE`, which
-     * preserves the provider's line breaks while still running the multilang filter) is added from it;
-     * otherwise neither `summary` nor `summaryformat` is present at all, so an existing course summary
-     * is never blanked by convert()'s field-by-field update.
+     * `fullname` is derived from `title` via derive_display_name() (see its docblock for how the
+     * `course.fullname`/`groups.name` 254-char column length is respected without ever storing broken
+     * multilang markup). When `sync_description` is on and `description` resolves to a non-empty
+     * string, `summary` (as `FORMAT_MOODLE`, which preserves the provider's line breaks while still
+     * running the multilang filter) is added from it; otherwise neither `summary` nor `summaryformat`
+     * is present at all, so an existing course summary is never blanked by convert()'s field-by-field
+     * update.
      *
      * @param   education_offering $offering A course_offering or component_offering entity
      * @return  stdClass Fields suitable for create_course()/update_course() (without `category`,
@@ -144,11 +141,7 @@ class offering_converter {
         $sitelang = $CFG->lang ?? 'en';
 
         $titles = $offering->get('title') ?? [];
-        $fullname = converter::pick_language_value($titles, $multilang, $sitelang);
-        if ($fullname === '') {
-            $fullname = $offering->get_id();
-        }
-        $fullname = core_text::substr($fullname, 0, 254);
+        $fullname = self::derive_display_name($titles, $multilang, $sitelang, $offering->get_id());
 
         $coursedata = (object) [
             'idnumber' => $offering->get_id(),
@@ -169,6 +162,41 @@ class offering_converter {
         }
 
         return $coursedata;
+    }
+
+    /**
+     * Derive a display name (course fullname or group name) from a `title` field, safely respecting
+     * the 254-char column length of `course.fullname`/`groups.name`.
+     *
+     * Preferring `$sitelang` over multilang markup depending on `$multilang`, via
+     * converter::pick_language_value(), with `$fallback` used when the resolved value is empty. A
+     * multilang-assembled value is never blindly truncated with core_text::substr(): doing so can cut a
+     * `<span class="multilang">` tag in half and store broken markup. Instead, when the resolved value
+     * exceeds 254 characters, the single-language pick (`pick_language_value($entries, false,
+     * $sitelang)`) is used instead, which is plain text with no tags to break; only that (already
+     * single-language) value is truncated to 254 characters, as a last-resort safety net for a title
+     * that is itself longer than the column.
+     *
+     * @param   array $entries stdClass[] shaped {recordLanguage, value}, e.g. $offering->get('title')
+     * @param   bool $multilang Whether multilang markup is wanted, per the `multilang` setting
+     * @param   string $sitelang The preferred Moodle language code
+     * @param   string $fallback Used when the resolved value is empty (typically the entity's sourcedId)
+     * @return  string At most 254 characters, never a truncated multilang span
+     */
+    protected static function derive_display_name(array $entries, bool $multilang, string $sitelang, string $fallback): string {
+        $value = converter::pick_language_value($entries, $multilang, $sitelang);
+        if ($value === '') {
+            $value = $fallback;
+        }
+
+        if (core_text::strlen($value) > 254) {
+            $value = converter::pick_language_value($entries, false, $sitelang);
+            if ($value === '') {
+                $value = $fallback;
+            }
+        }
+
+        return core_text::substr($value, 0, 254);
     }
 
     /**
@@ -305,10 +333,10 @@ SQL;
      * Create or update a Moodle group from a ComponentOffering, inside the given course, when the
      * chosen `offering_level` is `courseoffering` and `sync_groups` is active.
      *
-     * The group name is derived the same way as get_course_data()'s `fullname`: preferring the site's
-     * default language (`$CFG->lang`) over multilang markup depending on the `multilang` setting, then
-     * truncated to 254 characters with core_text::substr() to stay within the `groups.name` column
-     * length and avoid a DML error.
+     * The group name is derived the same way as get_course_data()'s `fullname`, via
+     * derive_display_name(): preferring the site's default language (`$CFG->lang`) over multilang
+     * markup depending on the `multilang` setting, and safely respecting the `groups.name` column
+     * length without ever storing a truncated (broken) multilang span.
      *
      * DB-mutating (creates/updates `groups` rows). Not exercised during development phase 3
      * verification.
@@ -328,11 +356,7 @@ SQL;
 
         $multilang = (bool) get_config('enrol_eduapi', 'multilang');
         $titles = $component->get('title') ?? [];
-        $name = converter::pick_language_value($titles, $multilang, $CFG->lang ?? 'en');
-        if ($name === '') {
-            $name = $component->get_id();
-        }
-        $name = core_text::substr($name, 0, 254);
+        $name = self::derive_display_name($titles, $multilang, $CFG->lang ?? 'en', $component->get_id());
 
         $existing = $DB->get_record('groups', ['courseid' => $course->id, 'idnumber' => $component->get_id()]);
 
