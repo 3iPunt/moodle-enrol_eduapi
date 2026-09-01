@@ -38,6 +38,83 @@ product's entry in the 1EdTech TrustEd Apps Directory, as required by the
 - If the plugin is disabled it stops syncing, but the courses, users and
   enrolments it already created remain.
 
+## Synchronisation behaviour
+
+### When it runs
+
+- The `full_sync` scheduled task performs the full synchronisation. It is
+  disabled by default: enable it in Site administration, Server, Scheduled
+  tasks, or run it on demand with
+  `php admin/cli/scheduled_task.php --execute='\enrol_eduapi\task\full_sync'`.
+- The `eduapi_offering_webhook` web service synchronises a single offering on
+  demand (same create/update rules as below, for that one offering).
+
+### What is in scope
+
+Only records within the configured scope are processed:
+
+- the organizations selected in `datasync_organizations`;
+- the academic session selected in `datasync_academic_session`, plus its child
+  sessions (selecting a school year also includes its semesters). An offering
+  tagged with a session outside this set is skipped, and so are the users and
+  enrolments that depend on it;
+- `exclude_inactive` (when on) drops organizations, offerings and persons whose
+  `recordStatus` is `inactive`. A `recordStatus` of `deleted` is always
+  excluded.
+
+Matching is by identifier, never by name: organizations match a category by
+`idnumber`, offerings match a course by `idnumber` (the offering `sourcedId`),
+and persons match a user through the stored mapping and the configured
+match field. Renaming a course `idnumber` in Moodle therefore unlinks it from
+its offering, and the next sync treats the offering as new.
+
+### Organizations to categories
+
+- Created as a Moodle course category (nested to mirror the organization
+  hierarchy) when no category has the matching `idnumber`.
+- Updated only when the source `dateLastModified` is newer than the category.
+
+### Offerings to courses (and groups)
+
+- A course is created when no course has the offering `sourcedId` as its
+  `idnumber`.
+- An existing course is updated field by field (fullname, shortname, start and
+  end dates, visibility, and the summary when `sync_description` is on) whenever
+  a value differs from the source. The course category is never changed on
+  update (a manual move is preserved).
+- Which offering becomes the course is set by `offering_level`. When it is
+  `courseoffering` and `sync_groups` is on, each ComponentOffering becomes a
+  group in that course.
+- Courses previously synced but no longer in the source are never deleted. With
+  `keep_existing_courses` on they are left untouched; with it off, only their
+  `enrol_eduapi` enrolment method is disabled (reversible), never the course.
+
+### Persons to users
+
+- An existing Moodle user is matched via `user_match_moodlefield` against the
+  `user_match_source` attribute (`primaryEmail`, `sourcedId`,
+  `extensions.<key>` or `otherIdentifiers.<identifierType>`).
+- A new user is created only when no match is found and
+  `create_unmatched_users` is on; otherwise the person is skipped (not synced).
+- For an already-linked user, only the `department` and `institution` fields are
+  updated, and only when a source is configured and `user_field_update_existing`
+  is on. The plugin never deletes users.
+
+### Enrolments and roles
+
+- A user is enrolled with the Moodle role mapped from the Edu-API role
+  (`role_mapping_<roletype>`); a role set to "Do not enrol" skips that
+  enrolment entirely.
+- The enrolment action per Edu-API enrollment status is configurable
+  (`enrollmentstatus_mapping_<status>`): enrol active, enrol suspended, unenrol
+  or ignore. A `recordStatus` of `deleted` always unenrols, regardless of the
+  status mapping.
+- Enrolment start and end dates come from the enrollment record, falling back to
+  the offering `roleEnablement` window for the enrolment's role, else no limit.
+- Unenrolment happens only from an explicit status or `deleted` record. An
+  enrollment that simply stops being returned by the provider does not
+  unenrol the user on its own.
+
 ## Requirements
 
 - Moodle 4.5 or later.
