@@ -1,6 +1,9 @@
 # Changes
 
-## Unreleased
+## 1.2.0 (2026-08-30)
+
+Course content and enrolment dates, plus a unified attribute grammar. No
+database schema changes; all new settings are optional.
 
 - Enrolments now carry a `timestart`/`timeend` instead of always being set to 0 ("no limit").
   Precedence: the Enrollment record's own `startDate`/`endDate` first, else the parent offering's
@@ -21,13 +24,6 @@
   prefers the site's default language (`$CFG->lang`), not the language of whoever triggers the sync.
   Course fullnames and group names are also truncated to 254 characters to stay within their column
   length.
-
-## 1.2.0 (2026-08-30)
-
-One grammar for every setting that picks a Person attribute, with an
-automatic migration of the stored `user_match_source` value. No database
-schema changes.
-
 - Unified the grammar for `user_match_source` and `user_field_<field>_source`: both now accept
   `primaryEmail`, `sourcedId`, `extensions.<key>` and `otherIdentifiers.<identifierType>` through a
   single `resolve_source_value()` resolver. A `user_match_source` value stored as a bare (dot-less)
